@@ -211,37 +211,118 @@ function makeCoralGeometry(type, dummyRand) {
 
 // ---------- animals ----------
 
+const smooth01 = (x) => {
+  const t = Math.max(0, Math.min(1, x))
+  return t * t * (3 - 2 * t)
+}
+
 function makeTurtle() {
   const g = new THREE.Group()
-  const shellMat = new THREE.MeshStandardMaterial({ color: 0x3f7a55, roughness: 0.8, flatShading: true })
-  const skinMat = new THREE.MeshStandardMaterial({ color: 0x6a9a6a, roughness: 0.85 })
-  const shell = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), shellMat)
-  shell.scale.set(1.1, 0.55, 1.3)
-  g.add(shell)
-  const belly = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.5, 10), skinMat)
-  belly.scale.set(1.05, 0.35, 1.25)
-  g.add(belly)
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 8, 6), skinMat)
-  head.position.set(0, 0.05, 1.25)
-  g.add(head)
-  const flipperMats = []
-  const flipperGeo = new THREE.SphereGeometry(0.5, 8, 6)
-  for (const [sx, sz] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {
-    const pivot = new THREE.Group()
-    pivot.position.set(sx * 0.75, -0.1, sz * 0.35)
-    const flipper = new THREE.Mesh(flipperGeo, skinMat)
-    flipper.scale.set(0.16, 0.4, 0.95)
-    flipper.position.set(sx * 0.45, 0, 0)
-    pivot.add(flipper)
-    g.add(pivot)
-    flipperMats.push({ pivot, front: sz > 0, sign: sx })
+  const shellMat = new THREE.MeshStandardMaterial({ color: 0x3f7a55, roughness: 0.72, flatShading: true })
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0x6a9a6a, roughness: 0.8 })
+  const plastronMat = new THREE.MeshStandardMaterial({ color: 0xd8cfae, roughness: 0.7 })
+
+  // shell: dense polygons + scute relief displacement
+  const shellGeo = new THREE.SphereGeometry(0.9, 32, 20, 0, Math.PI * 2, 0, Math.PI / 2)
+  {
+    const sp = shellGeo.attributes.position
+    const ringB = [0.27, 0.57, 0.85]
+    const ringC = [0, 0.42, 0.71, 0.95]
+    for (let i = 0; i < sp.count; i++) {
+      let x = sp.getX(i)
+      let y = sp.getY(i)
+      let z = sp.getZ(i)
+      const len = Math.hypot(x, y, z)
+      x /= len
+      y /= len
+      z /= len
+      const r = Math.hypot(x, z)
+      const a = Math.atan2(z, x)
+      const frac = (((a / (Math.PI / 3)) + 0.5) % 1 + 1) % 1
+      const angLine = 1 - smooth01(Math.min(frac, 1 - frac) / 0.13)
+      const ringIdx = r < ringB[0] ? 0 : r < ringB[1] ? 1 : r < ringB[2] ? 2 : 3
+      let dome = 1 - ((r - ringC[ringIdx]) / 0.34) * ((r - ringC[ringIdx]) / 0.34)
+      dome = Math.max(0, dome)
+      let rLine = 0
+      for (const b of ringB) rLine += 1 - smooth01(Math.abs(r - b) / 0.07)
+      const comb = dome * (1 - 0.8 * angLine) + rLine * 0.45
+      const bump = 0.085 * comb + 0.02 * Math.sin(x * 9 + 1.3) * Math.cos(z * 8 - 0.4)
+      sp.setXYZ(i, x * (1 + bump), y * (1 + bump * 1.2), z * (1 + bump))
+    }
+    shellGeo.computeVertexNormals()
+    shellGeo.scale(1.15, 0.5, 1.35)
   }
-  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.4, 5), skinMat)
+  const shell = new THREE.Mesh(shellGeo, shellMat)
+  g.add(shell)
+
+  // plastron (belly plate)
+  const belly = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.5, 12), plastronMat)
+  belly.scale.set(1.08, 0.34, 1.28)
+  g.add(belly)
+
+  // head (joint pivot)
+  const headPivot = new THREE.Group()
+  headPivot.position.set(0, 0.05, 1.05)
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), skinMat)
+  head.scale.set(1.0, 0.85, 1.25)
+  head.position.set(0, 0.02, 0.15)
+  headPivot.add(head)
+  const snout = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), skinMat)
+  snout.scale.set(1.0, 0.75, 1.0)
+  snout.position.set(0, -0.02, 0.42)
+  headPivot.add(snout)
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x2a3a2a, roughness: 0.7 })
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 4), darkMat)
+  nose.position.set(0, 0.03, 0.57)
+  headPivot.add(nose)
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.4 })
+  for (const side of [1, -1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 4), eyeMat)
+    eye.position.set(side * 0.13, 0.1, 0.28)
+    headPivot.add(eye)
+  }
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.24), darkMat)
+  mouth.position.set(0, -0.06, 0.4)
+  headPivot.add(mouth)
+  g.add(headPivot)
+
+  // flippers (paddle shapes, front large / rear small)
+  const flippers = []
+  const mkPaddle = (w, h, d, len) => {
+    const geo = new THREE.BoxGeometry(len, h, d)
+    geo.translate(len / 2, 0, 0)
+    return geo
+  }
+  const frontGeo = mkPaddle(0.9, 0.07, 0.42, 0.9)
+  const rearGeo = mkPaddle(0.62, 0.055, 0.3, 0.62)
+  for (const [sx, sz] of [[-1, 1], [1, 1]]) {
+    const pivot = new THREE.Group()
+    pivot.position.set(sx * 0.72, -0.12, sz * 0.34)
+    pivot.rotation.y = sx > 0 ? 0 : Math.PI
+    pivot.add(new THREE.Mesh(frontGeo, skinMat))
+    g.add(pivot)
+    flippers.push({ pivot, front: true, side: sx })
+  }
+  for (const [sx, sz] of [[-1, -1], [1, -1]]) {
+    const pivot = new THREE.Group()
+    pivot.position.set(sx * 0.68, -0.12, sz * 0.32)
+    pivot.rotation.y = sx > 0 ? 0 : Math.PI
+    pivot.add(new THREE.Mesh(rearGeo, skinMat))
+    g.add(pivot)
+    flippers.push({ pivot, front: false, side: sx })
+  }
+
+  // tail (joint pivot)
+  const tailPivot = new THREE.Group()
+  tailPivot.position.set(0, -0.05, -1.25)
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.45, 6), skinMat)
   tail.rotation.x = -Math.PI / 2
-  tail.position.set(0, -0.05, -1.35)
-  g.add(tail)
-  g.scale.setScalar(1.3)
-  return { group: g, flippers: flipperMats }
+  tail.position.z = -0.2
+  tailPivot.add(tail)
+  g.add(tailPivot)
+
+  g.scale.setScalar(1.2)
+  return { group: g, flippers, head: headPivot, tailPivot }
 }
 
 function makeGull() {
@@ -658,7 +739,24 @@ export function useOceanScene(containerRef) {
     {
       const t = makeTurtle()
       scene.add(t.group)
-      turtle = t
+      // surfacing bubble trail (pool)
+      const bubbleCount = 20
+      const bubblePos = new Float32Array(bubbleCount * 3)
+      const bubbleAge = new Float32Array(bubbleCount).fill(99)
+      const bubbleVel = new Float32Array(bubbleCount)
+      const bubbleGeo = new THREE.BufferGeometry()
+      bubbleGeo.setAttribute('position', new THREE.BufferAttribute(bubblePos, 3))
+      const bubbleMat = new THREE.PointsMaterial({
+        color: 0x9adcff, size: 0.09, transparent: true, opacity: 0.45,
+        blending: THREE.AdditiveBlending, depthWrite: false
+      })
+      const bubblePts = new THREE.Points(bubbleGeo, bubbleMat)
+      scene.add(bubblePts)
+      turtle = {
+        ...t,
+        diveT: 0,
+        bubbles: { pts: bubblePts, pos: bubblePos, age: bubbleAge, vel: bubbleVel, count: bubbleCount, timer: 0 }
+      }
     }
 
     // ---- jellyfish ----
@@ -797,19 +895,62 @@ export function useOceanScene(containerRef) {
         sc.im.instanceMatrix.needsUpdate = true
       }
 
-      // turtle
+      // turtle (cruise / dive / surface + bubble trail)
       if (turtle) {
+        const diveT = (Math.sin(t * 0.28 + 5.5) + 1) / 2
+        const rising = diveT < turtle.diveT
+        turtle.diveT = diveT
+        const radius = 24 - diveT * 12
+        const ty = -2.0 - diveT * 3.2 + Math.sin(t * 0.4) * 0.25
         const ta = t * 0.08
-        turtle.group.position.set(
-          Math.cos(ta) * 24, -2.0 + Math.sin(t * 0.4) * 0.3, Math.sin(ta) * 24
-        )
+        turtle.group.position.set(Math.cos(ta) * radius, ty, Math.sin(ta) * radius)
         _n.set(-Math.sin(ta), 0, Math.cos(ta))
         _q.setFromUnitVectors(Z_AXIS, _n)
         turtle.group.quaternion.copy(_q)
-        turtle.group.rotateZ(0.12)
+        turtle.group.rotateZ(0.12 + diveT * 0.18)
+        // head: turn + dive/surface nod
+        turtle.head.rotation.y = Math.sin(t * 0.5) * 0.18
+        turtle.head.rotation.x = (0.5 - diveT) * 0.6 + Math.sin(t * 0.3) * 0.08
+        // flippers: front crawl (asymmetric stroke), rear opposite small
+        const p = t * 2.1
+        const stroke = Math.sin(p) * (0.6 - 0.4 * Math.sin(p))
+        const rear = Math.sin(p + Math.PI / 2) * 0.3
         for (const f of turtle.flippers) {
-          f.pivot.rotation.x = Math.sin(t * 2.2 + (f.sign > 0 ? 0 : Math.PI)) * 0.4 * (f.front ? 1 : 0.5)
+          if (f.front) {
+            f.pivot.rotation.x = stroke
+            f.pivot.rotation.z = 0.1 + 0.08 * Math.sin(p + f.side)
+          } else {
+            f.pivot.rotation.x = -rear
+          }
         }
+        turtle.tailPivot.rotation.x = Math.sin(t * 1.3) * 0.25
+        // bubbles while surfacing
+        const bub = turtle.bubbles
+        if (rising && diveT > 0.3 && diveT < 0.85) {
+          bub.timer += CLOCK_DELTA
+          if (bub.timer > 0.33) {
+            bub.timer = 0
+            for (let i = 0; i < bub.count; i++) {
+              if (bub.age[i] >= 2) {
+                const back = new THREE.Vector3(0, 0.2, -1.6).applyQuaternion(turtle.group.quaternion)
+                bub.pos[i * 3] = turtle.group.position.x + back.x + (Math.random() - 0.5) * 0.5
+                bub.pos[i * 3 + 1] = turtle.group.position.y + back.y + 0.3
+                bub.pos[i * 3 + 2] = turtle.group.position.z + back.z + (Math.random() - 0.5) * 0.5
+                bub.age[i] = 0
+                bub.vel[i] = 0.4 + Math.random() * 0.5
+                break
+              }
+            }
+          }
+        }
+        for (let i = 0; i < bub.count; i++) {
+          if (bub.age[i] < 2) {
+            bub.age[i] += CLOCK_DELTA
+            bub.pos[i * 3 + 1] += bub.vel[i] * CLOCK_DELTA
+            bub.pos[i * 3] += Math.sin(performance.now() * 0.01 + i) * 0.002
+          }
+        }
+        bub.pts.geometry.attributes.position.needsUpdate = true
       }
 
       // jellyfish
