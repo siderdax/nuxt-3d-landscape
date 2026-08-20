@@ -123,41 +123,184 @@ void main() {
 
 // ---------- geometry builders ----------
 
-function makePalmFrondsGeometry() {
-  const parts = []
-  for (let i = 0; i < 6; i++) {
-    const frond = new THREE.PlaneGeometry(1.8, 0.4, 6, 1)
-    const pos = frond.attributes.position
-    for (let j = 0; j < pos.count; j++) {
-      const u = Math.abs(pos.getX(j)) / 0.9
-      pos.setY(j, pos.getY(j) - u * u * 0.7)
+function makeTrunkCanvas() {
+  const W = 128, H = 128
+  const c = makeCanvas(W, H)
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#8a6a45'
+  ctx.fillRect(0, 0, W, H)
+  // ring bands (canvas x = along the trunk, so bands are vertical strips)
+  for (let x = 0; x < W; x += 9) {
+    ctx.fillStyle = 'rgba(74,56,36,0.35)'
+    ctx.fillRect(x, 0, 2, H)
+    ctx.fillStyle = 'rgba(220,196,150,0.18)'
+    ctx.fillRect(x + 3, 0, 1.5, H)
+  }
+  const wrap = (x, fn) => {
+    for (const ox of [-W, 0, W]) {
+      ctx.save()
+      ctx.translate(ox, 0)
+      fn()
+      ctx.restore()
     }
-    frond.translate(0.85, 0, 0)
-    frond.rotateX(Math.PI / 2)
-    frond.rotateY((i / 6) * Math.PI * 2 + 0.4)
-    parts.push(frond)
+  }
+  // mottled patches
+  for (let i = 0; i < 40; i++) {
+    const x = Math.random() * W, y = Math.random() * H
+    const r = 6 + Math.random() * 16
+    wrap(x, () => {
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+      g.addColorStop(0, Math.random() < 0.5 ? 'rgba(60,46,30,0.2)' : 'rgba(200,178,132,0.15)')
+      g.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = g
+      ctx.fillRect(x - r, y - r, r * 2, r * 2)
+    })
+  }
+  return c
+}
+
+// one palm frond: curved rachis + drooping leaflet pairs
+function makePalmFrondGeometry(drop, random) {
+  const parts = []
+  const rachisCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0.38, 0.16 + random() * 0.06, 0),
+    new THREE.Vector3(0.8, 0.2 + drop * 0.05, 0),
+    new THREE.Vector3(1.15, 0.02 - drop * 0.12, 0),
+    new THREE.Vector3(1.42, -0.3 - drop * 0.25, 0)
+  ])
+  parts.push(new THREE.TubeGeometry(rachisCurve, 10, 0.014, 5))
+  const leafletBase = new THREE.PlaneGeometry(0.085, 0.34)
+  leafletBase.translate(0, 0.17, 0)
+  for (let i = 0; i < 6; i++) {
+    const t = 0.22 + (i / 5) * 0.76
+    const p = rachisCurve.getPoint(t)
+    const droop = 0.45 + t * 0.65
+    for (const side of [1, -1]) {
+      const lf = leafletBase.clone()
+      lf.rotateX(side * (Math.PI / 2 + droop))
+      lf.translate(p.x, p.y - 0.01, p.z)
+      parts.push(lf)
+    }
   }
   return BufferGeometryUtils.mergeGeometries(parts)
 }
 
+function tintGeo(geo, r, g, b) {
+  const n = geo.attributes.position.count
+  const col = new Float32Array(n * 3)
+  for (let i = 0; i < n; i++) {
+    col[i * 3] = r
+    col[i * 3 + 1] = g
+    col[i * 3 + 2] = b
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3))
+  return geo
+}
+
 function makeFishGeometry() {
-  const body = new THREE.ConeGeometry(0.17, 0.52, 6)
+  // body of revolution: rounded head -> deep middle -> narrow peduncle
+  const pts2d = [
+    [0.003, 0.28], [0.045, 0.245], [0.08, 0.16], [0.095, 0.04],
+    [0.08, -0.08], [0.05, -0.18], [0.02, -0.25], [0.003, -0.27]
+  ]
+  const curve = new THREE.CatmullRomCurve3(pts2d.map((p) => new THREE.Vector3(p[0], p[1], 0)))
+  const pts = curve.getPoints(20).map((p) => new THREE.Vector2(Math.max(0.002, p.x), p.y))
+  const body = new THREE.LatheGeometry(pts, 14)
   body.rotateX(Math.PI / 2)
-  const tail = new THREE.ConeGeometry(0.13, 0.24, 4)
-  tail.rotateX(-Math.PI / 2)
-  tail.translate(0, 0, -0.36)
-  return BufferGeometryUtils.mergeGeometries([body, tail])
+  const bp = body.attributes.position
+  for (let i = 0; i < bp.count; i++) {
+    bp.setX(i, bp.getX(i) * 0.62)
+    bp.setY(i, bp.getY(i) * 1.12)
+  }
+  body.computeVertexNormals()
+  const parts = [tintGeo(body, 1, 1, 1)]
+  // dorsal fin along the back
+  const dorsalS = new THREE.Shape()
+  dorsalS.moveTo(0.12, 0.085)
+  dorsalS.quadraticCurveTo(0.06, 0.17, -0.02, 0.155)
+  dorsalS.quadraticCurveTo(-0.10, 0.145, -0.17, 0.075)
+  dorsalS.quadraticCurveTo(-0.06, 0.1, 0.12, 0.085)
+  dorsalS.closePath()
+  const dorsal = new THREE.ShapeGeometry(dorsalS, 6)
+  dorsal.rotateY(-Math.PI / 2)
+  parts.push(tintGeo(dorsal, 0.92, 0.9, 0.95))
+  // forked caudal fin
+  const tailS = new THREE.Shape()
+  tailS.moveTo(0, 0.012)
+  tailS.quadraticCurveTo(-0.06, 0.10, -0.18, 0.16)
+  tailS.quadraticCurveTo(-0.11, 0.06, -0.055, 0.005)
+  tailS.quadraticCurveTo(-0.11, -0.06, -0.18, -0.16)
+  tailS.quadraticCurveTo(-0.06, -0.10, 0, -0.012)
+  tailS.closePath()
+  const caudal = new THREE.ShapeGeometry(tailS, 6)
+  caudal.rotateY(-Math.PI / 2)
+  caudal.translate(0, 0, -0.25)
+  parts.push(tintGeo(caudal, 0.9, 0.88, 0.94))
+  // pectoral fins (swept back)
+  for (const sign of [1, -1]) {
+    const pS = new THREE.Shape()
+    pS.moveTo(0, 0.02)
+    pS.quadraticCurveTo(sign * 0.05, 0.02, sign * 0.085, -0.01)
+    pS.quadraticCurveTo(sign * 0.045, -0.05, 0, -0.04)
+    pS.closePath()
+    const pectoral = new THREE.ShapeGeometry(pS, 5)
+    pectoral.rotateX(Math.PI / 2)
+    pectoral.translate(sign * 0.045, -0.01, 0.10)
+    parts.push(tintGeo(pectoral, 0.92, 0.9, 0.95))
+  }
+  // eyes
+  for (const side of [1, -1]) {
+    const eye = new THREE.SphereGeometry(0.018, 8, 6)
+    eye.translate(side * 0.028, 0.04, 0.215)
+    parts.push(tintGeo(eye, 0.07, 0.09, 0.11))
+  }
+  return BufferGeometryUtils.mergeGeometries(parts, false)
 }
 
 function makeKelpGeometry() {
   const parts = []
-  const stem = new THREE.CylinderGeometry(0.025, 0.05, 1, 5)
-  stem.translate(0, 0.5, 0)
+  // curved tapered stem
+  const stemCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0.02, 0.35, 0.01),
+    new THREE.Vector3(-0.02, 0.7, -0.02),
+    new THREE.Vector3(0.0, 1.0, 0)
+  ])
+  const stem = new THREE.TubeGeometry(stemCurve, 10, 0.035, 6)
+  {
+    const sv = stem.attributes.uv
+    const sp = stem.attributes.position
+    for (let i = 0; i < sp.count; i++) {
+      const tt = sv.getX(i)
+      const f = 1.7 - 1.15 * tt
+      const c = stemCurve.getPoint(tt)
+      sp.setX(i, c.x + (sp.getX(i) - c.x) * f)
+      sp.setZ(i, c.z + (sp.getZ(i) - c.z) * f)
+    }
+    stem.computeVertexNormals()
+  }
   parts.push(stem)
-  for (let i = 0; i < 4; i++) {
-    const frond = new THREE.PlaneGeometry(0.2 + (3 - i) * 0.05, 0.5)
-    frond.rotateY((i / 4) * Math.PI * 2 + 0.5)
-    frond.translate(0, 0.28 + i * 0.2, 0.06)
+  // 5 tapered, undulating blades
+  for (let i = 0; i < 5; i++) {
+    const w = 0.22 + (4 - i) * 0.035
+    const len = 0.45 + i * 0.06
+    const frond = new THREE.PlaneGeometry(w, len, 3, 8)
+    const fp = frond.attributes.position
+    const halfW = w / 2
+    for (let j = 0; j < fp.count; j++) {
+      const x = fp.getX(j)
+      const y = fp.getY(j)
+      const tAlong = (y + len / 2) / len
+      const nx = x * (1 - 0.55 * tAlong)
+      const nz = Math.sin(tAlong * 2.6 + i) * 0.05 * tAlong + (1 - (nx / halfW) * (nx / halfW)) * 0.04
+      fp.setX(j, nx)
+      fp.setZ(j, nz)
+    }
+    frond.computeVertexNormals()
+    const a = (i / 5) * Math.PI * 2 + 0.4
+    frond.rotateY(a)
+    frond.translate(Math.cos(a) * 0.02, 0.3 + i * 0.14, Math.sin(a) * 0.06)
     parts.push(frond)
   }
   return BufferGeometryUtils.mergeGeometries(parts)
@@ -166,45 +309,106 @@ function makeKelpGeometry() {
 function makeCoralGeometry(type, dummyRand) {
   const parts = []
   if (type === 0) {
-    for (let b = 0; b < 5; b++) {
-      const h = 0.5 + dummyRand() * 0.6
-      const br = new THREE.CylinderGeometry(0.035, 0.08, h, 5)
-      const a = (b / 5) * Math.PI * 2 + dummyRand() * 0.4
-      const dir = new THREE.Vector3(Math.cos(a) * 0.45, 1, Math.sin(a) * 0.45).normalize()
-      br.translate(0, h / 2, 0)
-      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
-      br.applyQuaternion(q)
-      br.translate(Math.cos(a) * 0.05, 0, Math.sin(a) * 0.05)
-      parts.push(br)
-      const tip = new THREE.SphereGeometry(0.06, 5, 4)
-      tip.translate(dir.x * h * 0.5 + Math.cos(a) * 0.05, dir.y * h * 0.5, dir.z * h * 0.5 + Math.sin(a) * 0.05)
+    // staghorn: curved multi-segment branches with side shoots
+    for (let b = 0; b < 6; b++) {
+      const a = (b / 6) * Math.PI * 2 + dummyRand() * 0.5
+      const lean = 0.3 + dummyRand() * 0.35
+      const dir = new THREE.Vector3(Math.cos(a) * lean, 1, Math.sin(a) * lean).normalize()
+      const segs = 2 + Math.floor(dummyRand() * 2)
+      const segLen = (0.35 + dummyRand() * 0.45) / segs
+      let posV = new THREE.Vector3(Math.cos(a) * 0.06, 0.05, Math.sin(a) * 0.06)
+      let dirV = dir.clone()
+      let radius = 0.055
+      for (let sIdx = 0; sIdx < segs; sIdx++) {
+        const seg = new THREE.CylinderGeometry(radius * 0.72, radius, segLen, 5)
+        seg.translate(0, segLen / 2, 0)
+        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dirV)
+        seg.applyQuaternion(q)
+        seg.translate(posV.x, posV.y, posV.z)
+        parts.push(seg)
+        posV.addScaledVector(dirV, segLen)
+        dirV.add(new THREE.Vector3((dummyRand() - 0.5) * 0.5, 0.35, (dummyRand() - 0.5) * 0.5)).normalize()
+        radius *= 0.72
+        if (sIdx === 0 && dummyRand() > 0.4) {
+          const sideDir = dirV.clone().add(new THREE.Vector3(Math.cos(a + 1.6) * 0.9, 0.3, Math.sin(a + 1.6) * 0.9)).normalize()
+          const side = new THREE.CylinderGeometry(0.02, 0.032, 0.16, 4)
+          side.translate(0, 0.08, 0)
+          side.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), sideDir))
+          side.translate(posV.x, posV.y, posV.z)
+          parts.push(side)
+        }
+      }
+      const tip = new THREE.SphereGeometry(radius * 1.1, 6, 5)
+      tip.translate(posV.x, posV.y, posV.z)
       parts.push(tip)
     }
   } else if (type === 1) {
-    const blob = new THREE.IcosahedronGeometry(0.55, 1)
+    // boulder: rough two-octave displacement
+    const blob = new THREE.IcosahedronGeometry(0.55, 2)
     const pos = blob.attributes.position
     for (let j = 0; j < pos.count; j++) {
       const x = pos.getX(j), y = pos.getY(j), z = pos.getZ(j)
-      const s = 1 + 0.18 * Math.sin(x * 5 + y * 3) * Math.cos(z * 4.3)
+      const s = 1
+        + 0.16 * Math.sin(x * 5 + y * 3) * Math.cos(z * 4.3)
+        + 0.07 * Math.sin(x * 11 - z * 9 + y * 7)
       pos.setXYZ(j, x * s, y * s * 0.8, z * s)
     }
     blob.translate(0, 0.4, 0)
     parts.push(blob)
   } else if (type === 2) {
-    for (let t = 0; t < 6; t++) {
-      const h = 0.45 + dummyRand() * 0.5
-      const tube = new THREE.CylinderGeometry(0.07, 0.09, h, 7)
-      tube.translate((dummyRand() - 0.5) * 0.5, h / 2, (dummyRand() - 0.5) * 0.5)
+    // tube cluster with open rims
+    for (let t = 0; t < 7; t++) {
+      const h = 0.4 + dummyRand() * 0.5
+      const tx = (dummyRand() - 0.5) * 0.5
+      const tz = (dummyRand() - 0.5) * 0.5
+      const tube = new THREE.CylinderGeometry(0.07, 0.09, h, 7, 1, true)
+      tube.translate(tx, h / 2, tz)
       parts.push(tube)
+      const rim = new THREE.TorusGeometry(0.07, 0.018, 5, 8)
+      rim.rotateX(Math.PI / 2)
+      rim.translate(tx, h, tz)
+      parts.push(rim)
     }
-  } else {
+  } else if (type === 3) {
+    // sea fans: annular sectors with wavy lattice, 3 layered planes
     for (let f = 0; f < 3; f++) {
-      const fan = new THREE.PlaneGeometry(0.7, 0.5, 3, 3)
-      fan.rotateX(-0.5 - f * 0.25)
-      fan.rotateY(f * 0.5 - 0.5)
-      fan.translate(0.3, 0.45, 0)
+      const s = new THREE.Shape()
+      const r0 = 0.16, r1 = 0.78, arc = 0.95
+      s.absarc(0, 0, r1, -arc / 2, arc / 2, false)
+      s.absarc(0, 0, r0, arc / 2, -arc / 2, true)
+      s.closePath()
+      const fan = new THREE.ShapeGeometry(s, 10)
+      const fp = fan.attributes.position
+      for (let j = 0; j < fp.count; j++) {
+        const x = fp.getX(j), y = fp.getY(j)
+        const ridge = 0.035 * Math.sin(x * 16 + y * 9) * Math.sin(y * 12 - x * 7)
+        fp.setZ(j, ridge)
+      }
+      fan.computeVertexNormals()
+      fan.rotateX(-0.55 - f * 0.22)
+      fan.rotateY(f * 0.55 - 0.55)
+      fan.translate(0.22, 0.12, 0)
       parts.push(fan)
     }
+  } else {
+    // table coral: curved column + wavy plate
+    const col = new THREE.CylinderGeometry(0.07, 0.16, 0.55, 8)
+    col.translate(0.04, 0.28, 0)
+    col.rotateZ(-0.12)
+    parts.push(col)
+    const plate = new THREE.CylinderGeometry(0.55, 0.42, 0.12, 14)
+    const pp = plate.attributes.position
+    for (let j = 0; j < pp.count; j++) {
+      const x = pp.getX(j), y = pp.getY(j), z = pp.getZ(j)
+      if (y > 0.02) pp.setY(j, y + 0.04 * Math.sin(x * 7 + 1.2) * Math.cos(z * 6 - 0.7))
+    }
+    plate.computeVertexNormals()
+    plate.translate(0.09, 0.6, 0)
+    parts.push(plate)
+    const rim = new THREE.TorusGeometry(0.5, 0.03, 5, 14)
+    rim.rotateX(Math.PI / 2)
+    rim.translate(0.09, 0.56, 0)
+    parts.push(rim)
   }
   return BufferGeometryUtils.mergeGeometries(parts, false)
 }
@@ -491,6 +695,213 @@ function makeRoofCanvas() {
     ctx.fillRect(x, y, 1, 1)
   }
   return c
+}
+
+function makeIslandCanvas() {
+  const W = 1024, H = 512
+  const c = makeCanvas(W, H)
+  const ctx = c.getContext('2d')
+  // sand base: lighter wet sand at the waterline (canvas bottom) -> rocky top
+  const g = ctx.createLinearGradient(0, H, 0, 0)
+  g.addColorStop(0, '#e2cd9c')
+  g.addColorStop(0.35, '#d8c08a')
+  g.addColorStop(0.75, '#c8b283')
+  g.addColorStop(1, '#9a8f74')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, W, H)
+  const wrap = (x, fn) => {
+    for (const ox of [-W, 0, W]) {
+      ctx.save()
+      ctx.translate(ox, 0)
+      fn()
+      ctx.restore()
+    }
+  }
+  // erosion streaks
+  for (let i = 0; i < 90; i++) {
+    const x = Math.random() * W
+    const y0 = Math.random() * H * 0.7
+    const len = 40 + Math.random() * 160
+    const dark = Math.random() < 0.5
+    wrap(x, () => {
+      const lg = ctx.createLinearGradient(0, y0, 0, y0 + len)
+      lg.addColorStop(0, 'rgba(0,0,0,0)')
+      lg.addColorStop(0.5, dark ? 'rgba(90,78,54,0.14)' : 'rgba(255,248,220,0.12)')
+      lg.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = lg
+      ctx.fillRect(x - 2, y0, 4 + Math.random() * 6, len)
+    })
+  }
+  // rock patches toward the top
+  for (let i = 0; i < 26; i++) {
+    const x = Math.random() * W
+    const y = Math.random() * H * 0.4
+    const r = 30 + Math.random() * 80
+    wrap(x, () => {
+      const rg = ctx.createRadialGradient(x, y, 0, x, y, r)
+      rg.addColorStop(0, Math.random() < 0.5 ? 'rgba(122,116,98,0.4)' : 'rgba(146,138,116,0.35)')
+      rg.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = rg
+      ctx.fillRect(x - r, y - r, r * 2, r * 2)
+    })
+  }
+  // shrub speckles
+  for (let i = 0; i < 420; i++) {
+    const x = Math.random() * W
+    const y = Math.random() * H * 0.45
+    const s = 2 + Math.random() * 5
+    wrap(x, () => {
+      ctx.fillStyle = `rgba(${(40 + Math.random() * 40) | 0},${(90 + Math.random() * 50) | 0},${(40 + Math.random() * 30) | 0},0.5)`
+      ctx.fillRect(x, y, s, s * 0.7)
+    })
+  }
+  // sand grain
+  for (let i = 0; i < 9000; i++) {
+    const x = Math.random() * W, y = Math.random() * H
+    ctx.fillStyle = Math.random() < 0.5
+      ? `rgba(96,84,58,${0.06 + Math.random() * 0.1})`
+      : `rgba(255,250,230,${0.05 + Math.random() * 0.1})`
+    ctx.fillRect(x, y, 1, 1)
+  }
+  // shell fragments at the waterline
+  for (let i = 0; i < 130; i++) {
+    const x = Math.random() * W
+    const y = H * 0.88 + Math.random() * H * 0.1
+    wrap(x, () => {
+      ctx.fillStyle = `rgba(245,240,225,${0.3 + Math.random() * 0.4})`
+      ctx.beginPath()
+      ctx.arc(x, y, 1 + Math.random() * 2.5, 0, Math.PI * 2)
+      ctx.fill()
+    })
+  }
+  return c
+}
+
+function makeSandCanvas() {
+  const W = 512, H = 512
+  const c = makeCanvas(W, H)
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#96948f'
+  ctx.fillRect(0, 0, W, H)
+  const wrap = (x, fn) => {
+    for (const ox of [-W, 0, W]) {
+      ctx.save()
+      ctx.translate(ox, 0)
+      fn()
+      ctx.restore()
+    }
+  }
+  // soft mottling
+  for (let i = 0; i < 70; i++) {
+    const x = Math.random() * W, y = Math.random() * H
+    const r = 20 + Math.random() * 60
+    wrap(x, () => {
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+      g.addColorStop(0, Math.random() < 0.5 ? 'rgba(210,208,200,0.10)' : 'rgba(110,108,100,0.10)')
+      g.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = g
+      ctx.fillRect(x - r, y - r, r * 2, r * 2)
+    })
+  }
+  // ripple bands (periodic so tiles seamlessly)
+  const f = (Math.PI * 2 * 4) / W
+  for (let i = 0; i < 26; i++) {
+    const y0 = (i / 26) * H + Math.random() * 10
+    ctx.strokeStyle = Math.random() < 0.5 ? 'rgba(220,218,208,0.08)' : 'rgba(96,94,88,0.08)'
+    ctx.lineWidth = 2 + Math.random() * 3
+    ctx.beginPath()
+    for (let x = 0; x <= W; x += 12) {
+      const yy = y0 + 4 * Math.sin(x * f + i * 1.3)
+      if (x === 0) ctx.moveTo(x, yy)
+      else ctx.lineTo(x, yy)
+    }
+    ctx.stroke()
+  }
+  // grain
+  for (let i = 0; i < 14000; i++) {
+    ctx.fillStyle = Math.random() < 0.5
+      ? `rgba(225,222,212,${0.05 + Math.random() * 0.12})`
+      : `rgba(80,78,72,${0.05 + Math.random() * 0.12})`
+    ctx.fillRect(Math.random() * W, Math.random() * H, 1, 1)
+  }
+  // pebbles
+  for (let i = 0; i < 90; i++) {
+    const x = Math.random() * W, y = Math.random() * H
+    const r = 1.5 + Math.random() * 3
+    const cr = (120 + Math.random() * 60) | 0
+    const cg = (118 + Math.random() * 55) | 0
+    const cb = (110 + Math.random() * 50) | 0
+    wrap(x, () => {
+      ctx.fillStyle = `rgba(${cr},${cg},${cb},0.5)`
+      ctx.beginPath()
+      ctx.ellipse(x, y, r, r * (0.6 + Math.random() * 0.4), Math.random() * Math.PI, 0, Math.PI * 2)
+      ctx.fill()
+    })
+  }
+  return c
+}
+
+// ---------- jellyfish builders ----------
+
+function makeJellyBellGeometry() {
+  const pts2d = [
+    [0.02, 0.52], [0.22, 0.47], [0.38, 0.38], [0.49, 0.25],
+    [0.55, 0.10], [0.56, 0.0], [0.52, -0.05], [0.46, -0.07]
+  ]
+  const curve = new THREE.CatmullRomCurve3(pts2d.map((p) => new THREE.Vector3(p[0], p[1], 0)))
+  const pts = curve.getPoints(24).map((p) => new THREE.Vector2(Math.max(0.001, p.x), p.y))
+  const geo = new THREE.LatheGeometry(pts, 24)
+  geo.computeVertexNormals()
+  return geo
+}
+
+function makeTentacleGeometry(x0, z0, r, len, bulge) {
+  const curve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(x0, 0, z0),
+    new THREE.Vector3(x0 * (1 + bulge), -len * 0.45, z0 * (1 + bulge)),
+    new THREE.Vector3(x0 * (1 - bulge * 0.5), -len, z0 * (1 - bulge * 0.5))
+  ])
+  const geo = new THREE.TubeGeometry(curve, 14, r, 6)
+  const uv = geo.attributes.uv
+  const pos = geo.attributes.position
+  const p0 = curve.getPoint(0)
+  const p1 = curve.getPoint(1)
+  for (let i = 0; i < pos.count; i++) {
+    const tt = uv.getX(i)
+    const f = 1 - 0.65 * tt
+    const cx = p0.x + (p1.x - p0.x) * tt
+    const cz = p0.z + (p1.z - p0.z) * tt
+    pos.setX(i, cx + (pos.getX(i) - cx) * f)
+    pos.setZ(i, cz + (pos.getZ(i) - cz) * f)
+  }
+  geo.computeVertexNormals()
+  return geo
+}
+
+function makeJellyTentMat(hue) {
+  const mat = new THREE.MeshStandardMaterial({
+    color: hue, emissive: hue, emissiveIntensity: 0.3, transparent: true, opacity: 0.3
+  })
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = { value: 0 }
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+         uniform float uTime;`
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+         vec4 jwp = modelMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+         float jph = jwp.x * 0.35 + jwp.z * 0.31;
+         float hang = clamp(-position.y / 1.5, 0.0, 1.0);
+         transformed.x += sin(uTime * 1.3 + jph + position.y * 1.8) * 0.16 * hang;
+         transformed.z += cos(uTime * 1.05 + jph + position.y * 1.4) * 0.14 * hang;`
+      )
+    mat.userData.shader = shader
+  }
+  return mat
 }
 
 // ---------- detailed lighthouse ----------
@@ -821,136 +1232,672 @@ function makeLighthouse(texAssets) {
 
 // ---------- animals ----------
 
-const smooth01 = (x) => {
-  const t = Math.max(0, Math.min(1, x))
+// ---------- sea turtle (detailed) ----------
+
+function sstep(a, b, x) {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)))
   return t * t * (3 - 2 * t)
 }
 
-function makeTurtle() {
-  const g = new THREE.Group()
-  const shellMat = new THREE.MeshStandardMaterial({ color: 0x3f7a55, roughness: 0.72, flatShading: true })
-  const skinMat = new THREE.MeshStandardMaterial({ color: 0x6a9a6a, roughness: 0.8 })
-  const plastronMat = new THREE.MeshStandardMaterial({ color: 0xd8cfae, roughness: 0.7 })
+function hash2(x, y) {
+  const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453
+  return s - Math.floor(s)
+}
 
-  // shell: dense polygons + scute relief displacement
-  const shellGeo = new THREE.SphereGeometry(0.9, 32, 20, 0, Math.PI * 2, 0, Math.PI / 2)
+function valueNoise(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y)
+  const xf = x - xi, yf = y - yi
+  const u = xf * xf * (3 - 2 * xf)
+  const v = yf * yf * (3 - 2 * yf)
+  const a = hash2(xi, yi), b = hash2(xi + 1, yi)
+  const c = hash2(xi, yi + 1), d = hash2(xi + 1, yi + 1)
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v
+}
+
+// scute layout in top-down unit space (head at +z)
+const CAR_CENTRAL = [
+  [0.62, 0.17, 0.16],
+  [0.34, 0.24, 0.17],
+  [0.06, 0.31, 0.19],
+  [-0.20, 0.30, 0.16],
+  [-0.44, 0.27, 0.13],
+  [-0.62, 0.24, 0.11],
+  [-0.76, 0.21, 0.09],
+  [-0.875, 0.15, 0.065]
+]
+const CAR_COSTAL = [
+  [0.47, 0.47, 0.24, 0.24],
+  [0.51, 0.15, 0.26, 0.28],
+  [0.53, -0.17, 0.27, 0.31],
+  [0.49, -0.48, 0.25, 0.29]
+]
+
+function carapaceAt(x, z, st) {
+  let d2 = 2, id = 900, kind = 2
+  for (let i = 0; i < CAR_CENTRAL.length; i++) {
+    const [cz, rx, rz] = CAR_CENTRAL[i]
+    const e = (x / rx) * (x / rx) + ((z - cz) / rz) * ((z - cz) / rz)
+    if (e < d2) { d2 = e; id = i; kind = 0 }
+  }
+  const sgn = x >= 0 ? 1 : -1
+  for (let i = 0; i < CAR_COSTAL.length; i++) {
+    const [cx, cz, rx, rz] = CAR_COSTAL[i]
+    const e = ((x - sgn * cx) / rx) * ((x - sgn * cx) / rx) + ((z - cz) / rz) * ((z - cz) / rz)
+    if (e < d2) { d2 = e; id = 100 + i * 2 + (sgn > 0 ? 1 : 0); kind = 1 }
+  }
+  if (kind < 2) {
+    return {
+      plate: (1 - d2) * (1 - d2),
+      groove: sstep(0.84, 0.995, d2),
+      id, kind
+    }
+  }
+  const ang = Math.atan2(z, x)
+  const f = (((ang / (Math.PI * 2)) + 1) % 1) * 19
+  const fe = Math.min(f - Math.floor(f), Math.ceil(f) - f) * 2
+  const rimFade = 1 - sstep(0.84, 1.0, st)
+  return {
+    plate: fe * fe * 0.8 * rimFade,
+    groove: (1 - sstep(0.08, 0.4, fe)) * 0.9 + sstep(0.9, 1.0, st) * 0.4,
+    id: 500 + Math.floor(f), kind: 2
+  }
+}
+
+function makeCarapaceCanvas(W, H, isBump) {
+  const c = makeCanvas(W, H)
+  const ctx = c.getContext('2d')
+  const img = ctx.createImageData(W, H)
+  const d = img.data
+  for (let py = 0; py < H; py++) {
+    const theta = (py / (H - 1)) * (Math.PI / 2)
+    const st = Math.sin(theta), ct = Math.cos(theta)
+    for (let px = 0; px < W; px++) {
+      const a = (px / W) * Math.PI * 2
+      const x = -Math.cos(a) * st
+      const z = Math.sin(a) * st
+      const sc = carapaceAt(x, z, st)
+      const h = hash2(sc.id, 7.31)
+      const o = (py * W + px) * 4
+      if (isBump) {
+        const brush = 0.06 * Math.sin(ct * 44 + h * 9)
+        const lum = Math.max(0, Math.min(255, 96 + 130 * sc.plate - 115 * sc.groove + 12 * brush * 10))
+        d[o] = d[o + 1] = d[o + 2] = lum
+      } else {
+        let r, g, b
+        if (sc.kind === 0) { r = 98 + h * 30; g = 110 + h * 26; b = 70 + h * 20 }
+        else if (sc.kind === 1) { r = 116 + h * 26; g = 114 + h * 24; b = 76 + h * 18 }
+        else { r = 92 + h * 24; g = 88 + h * 20; b = 62 + h * 14 }
+        const mottle = valueNoise(x * 3.4 + 11.7, z * 3.4 + 4.2)
+        const brush = 0.05 * Math.sin(ct * 44 + h * 9)
+        const speck = hash2(Math.floor(px / 2.3), Math.floor(py / 2.3) + sc.id * 31)
+        let light = (0.86 + 0.26 * mottle) * (1 + 0.14 * sc.plate + brush - 0.5 * sc.groove)
+        if (speck < 0.055) light *= 0.7
+        else if (speck > 0.968) light *= 1.22
+        d[o] = Math.min(255, r * light)
+        d[o + 1] = Math.min(255, g * light)
+        d[o + 2] = Math.min(255, b * light)
+      }
+      d[o + 3] = 255
+    }
+  }
+  ctx.putImageData(img, 0, 0)
+  return c
+}
+
+function makeSkinCanvas() {
+  const W = 512, H = 512
+  const c = makeCanvas(W, H)
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#7c8c52'
+  ctx.fillRect(0, 0, W, H)
+  for (let i = 0; i < 90; i++) {
+    const x = Math.random() * W, y = Math.random() * H
+    const r = 14 + Math.random() * 46
+    const dark = Math.random() < 0.6
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+    g.addColorStop(0, dark ? 'rgba(58,72,38,0.16)' : 'rgba(196,190,120,0.13)')
+    g.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = g
+    ctx.fillRect(x - r, y - r, r * 2, r * 2)
+  }
+  for (let i = 0; i < 5200; i++) {
+    const s = 0.6 + Math.random() * 1.6
+    ctx.fillStyle = `rgba(40,52,26,${0.08 + Math.random() * 0.16})`
+    ctx.fillRect(Math.random() * W, Math.random() * H, s, s)
+  }
+  for (let i = 0; i < 1400; i++) {
+    ctx.fillStyle = `rgba(205,200,130,${0.06 + Math.random() * 0.12})`
+    ctx.fillRect(Math.random() * W, Math.random() * H, 1, 1)
+  }
+  return c
+}
+
+function makePlastronCanvas() {
+  const W = 512, H = 256
+  const c = makeCanvas(W, H)
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#d3c69e'
+  ctx.fillRect(0, 0, W, H)
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * W, y = Math.random() * H
+    const r = 12 + Math.random() * 38
+    const dark = Math.random() < 0.55
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+    g.addColorStop(0, dark ? 'rgba(122,104,66,0.18)' : 'rgba(240,232,198,0.2)')
+    g.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = g
+    ctx.fillRect(x - r, y - r, r * 2, r * 2)
+  }
+  const wrap = (x, fn) => {
+    for (const ox of [-W, 0, W]) {
+      ctx.save()
+      ctx.translate(ox, 0)
+      fn()
+      ctx.restore()
+    }
+  }
+  // 8 sector seams
+  ctx.strokeStyle = 'rgba(84,72,44,0.5)'
+  ctx.lineWidth = 2.5
+  for (let i = 0; i < 8; i++) {
+    const bx = (i / 8) * W
+    wrap(bx, () => {
+      ctx.beginPath()
+      for (let y = 0; y <= H; y += 8) {
+        const xx = bx + 5 * Math.sin(y * 0.045 + i * 1.7)
+        if (y === 0) ctx.moveTo(xx, y)
+        else ctx.lineTo(xx, y)
+      }
+      ctx.stroke()
+    })
+  }
+  // transverse seams
+  ctx.strokeStyle = 'rgba(84,72,44,0.35)'
+  ctx.lineWidth = 2
+  for (const by of [64, 132]) {
+    ctx.beginPath()
+    for (let x = 0; x <= W; x += 10) {
+      const yy = by + 4 * Math.sin(x * 0.02 + by)
+      if (x === 0) ctx.moveTo(x, yy)
+      else ctx.lineTo(x, yy)
+    }
+    ctx.stroke()
+  }
+  for (let i = 0; i < 900; i++) {
+    ctx.fillStyle = `rgba(96,84,52,${0.05 + Math.random() * 0.1})`
+    ctx.fillRect(Math.random() * W, Math.random() * H, 1.2, 1.2)
+  }
+  return c
+}
+
+function makeFlipperGeometry(len, chord, thick) {
+  const s = new THREE.Shape()
+  const cR = chord * 0.40, cF = chord * 0.60
+  s.moveTo(0, -cR)
+  s.quadraticCurveTo(len * 0.34, -cR * 1.25, len * 0.62, -chord * 0.42)
+  s.quadraticCurveTo(len * 0.90, -chord * 0.30, len * 0.99, -chord * 0.05)
+  s.quadraticCurveTo(len * 1.03, chord * 0.10, len * 0.93, chord * 0.18)
+  s.quadraticCurveTo(len * 0.68, chord * 0.42, len * 0.40, chord * 0.55)
+  s.quadraticCurveTo(len * 0.16, cF * 1.05, 0, cF)
+  s.closePath()
+  const geo = new THREE.ExtrudeGeometry(s, {
+    depth: thick, bevelEnabled: true, bevelThickness: thick * 0.6, bevelSize: thick * 0.5, bevelSegments: 2, curveSegments: 10
+  })
+  geo.rotateX(Math.PI / 2)
+  const p = geo.attributes.position
+  for (let i = 0; i < p.count; i++) {
+    const f = 1 - 0.5 * Math.max(0, p.getX(i) / len)
+    p.setY(i, p.getY(i) * f)
+  }
+  geo.computeVertexNormals()
+  return geo
+}
+
+function makeTurtle(texAssets) {
+  const g = new THREE.Group()
+
+  const shellTex = toTexture(makeCarapaceCanvas(1024, 1024, false))
+  const shellBump = toTexture(makeCarapaceCanvas(512, 512, true))
+  const skinTex = toTexture(makeSkinCanvas())
+  const plastronTex = toTexture(makePlastronCanvas())
+  if (texAssets) texAssets.push(shellTex, shellBump, skinTex, plastronTex)
+
+  const shellMat = new THREE.MeshStandardMaterial({ map: shellTex, bumpMap: shellBump, bumpScale: 0.16, roughness: 0.74 })
+  const skinMat = new THREE.MeshStandardMaterial({ map: skinTex, bumpMap: skinTex, bumpScale: 0.05, roughness: 0.68 })
+  const plastronMat = new THREE.MeshStandardMaterial({ map: plastronTex, bumpMap: plastronTex, bumpScale: 0.09, roughness: 0.72 })
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x22291c, roughness: 0.6 })
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x2a1d0a, roughness: 0.28, metalness: 0.15 })
+  const shineMat = new THREE.MeshBasicMaterial({ color: 0xfff6dd })
+
+  // carapace: dense hemisphere + per-scute relief
+  const shellGeo = new THREE.SphereGeometry(1, 128, 48, 0, Math.PI * 2, 0, Math.PI / 2)
   {
     const sp = shellGeo.attributes.position
-    const ringB = [0.27, 0.57, 0.85]
-    const ringC = [0, 0.42, 0.71, 0.95]
     for (let i = 0; i < sp.count; i++) {
-      let x = sp.getX(i)
-      let y = sp.getY(i)
-      let z = sp.getZ(i)
+      let x = sp.getX(i), y = sp.getY(i), z = sp.getZ(i)
       const len = Math.hypot(x, y, z)
       x /= len
       y /= len
       z /= len
-      const r = Math.hypot(x, z)
-      const a = Math.atan2(z, x)
-      const frac = (((a / (Math.PI / 3)) + 0.5) % 1 + 1) % 1
-      const angLine = 1 - smooth01(Math.min(frac, 1 - frac) / 0.13)
-      const ringIdx = r < ringB[0] ? 0 : r < ringB[1] ? 1 : r < ringB[2] ? 2 : 3
-      let dome = 1 - ((r - ringC[ringIdx]) / 0.34) * ((r - ringC[ringIdx]) / 0.34)
-      dome = Math.max(0, dome)
-      let rLine = 0
-      for (const b of ringB) rLine += 1 - smooth01(Math.abs(r - b) / 0.07)
-      const comb = dome * (1 - 0.8 * angLine) + rLine * 0.45
-      const bump = 0.085 * comb + 0.02 * Math.sin(x * 9 + 1.3) * Math.cos(z * 8 - 0.4)
-      sp.setXYZ(i, x * (1 + bump), y * (1 + bump * 1.2), z * (1 + bump))
+      const st = Math.hypot(x, z)
+      const sc = carapaceAt(x, z, st)
+      let h = 0.05 * sc.plate
+      h -= 0.04 * sc.groove
+      h += 0.006 * Math.sin(x * 21 + 1.7) * Math.cos(z * 18 - 0.6)
+      sp.setXYZ(i, x * (1 + h), y * (1 + h * 1.25), z * (1 + h))
     }
     shellGeo.computeVertexNormals()
-    shellGeo.scale(1.15, 0.5, 1.35)
+    shellGeo.scale(1.05, 0.40, 1.32)
   }
   const shell = new THREE.Mesh(shellGeo, shellMat)
   g.add(shell)
 
-  // plastron (belly plate)
-  const belly = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.5, 12), plastronMat)
-  belly.scale.set(1.08, 0.34, 1.28)
+  // plastron (lower shell, inset so the carapace overhangs)
+  const bellyGeo = new THREE.SphereGeometry(1, 64, 20, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2)
+  bellyGeo.scale(1.0, 0.30, 1.25)
+  const belly = new THREE.Mesh(bellyGeo, plastronMat)
+  belly.position.y = -0.02
   g.add(belly)
 
-  // head (joint pivot)
-  const headPivot = new THREE.Group()
-  headPivot.position.set(0, 0.05, 1.05)
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), skinMat)
-  head.scale.set(1.0, 0.85, 1.25)
-  head.position.set(0, 0.02, 0.15)
-  headPivot.add(head)
-  const snout = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), skinMat)
-  snout.scale.set(1.0, 0.75, 1.0)
-  snout.position.set(0, -0.02, 0.42)
-  headPivot.add(snout)
-  const darkMat = new THREE.MeshStandardMaterial({ color: 0x2a3a2a, roughness: 0.7 })
-  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 4), darkMat)
-  nose.position.set(0, 0.03, 0.57)
-  headPivot.add(nose)
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.4 })
-  for (const side of [1, -1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 4), eyeMat)
-    eye.position.set(side * 0.13, 0.1, 0.28)
-    headPivot.add(eye)
+  // shell rim (visible edge where carapace meets plastron)
+  const rimMat = new THREE.MeshStandardMaterial({ color: 0x4a5238, roughness: 0.85 })
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.055, 10, 72), rimMat)
+  rim.rotation.x = 0
+  rim.scale.set(1.02, 0.30, 1.29)
+  rim.position.y = -0.01
+  g.add(rim)
+
+  // weathering: barnacles + algae patches on the carapace
+  {
+    const barnacleGeo = new THREE.SphereGeometry(0.024, 6, 5)
+    barnacleGeo.scale(1, 0.55, 1)
+    const barnacleMat = new THREE.MeshStandardMaterial({ color: 0xb5af9e, roughness: 0.95 })
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * Math.PI * 2
+      const r = 0.12 + Math.random() * 0.62
+      const m = new THREE.Mesh(barnacleGeo, barnacleMat)
+      m.position.set(
+        Math.cos(a) * r * 1.05 * 1.02,
+        Math.sqrt(Math.max(0, 1 - r * r)) * 0.40 * 1.02,
+        Math.sin(a) * r * 1.32 * 1.02
+      )
+      m.scale.setScalar(0.45 + Math.random() * 1.1)
+      m.rotation.set(Math.random(), Math.random() * Math.PI, Math.random())
+      g.add(m)
+    }
+    const algaeGeo = new THREE.CircleGeometry(0.1, 10)
+    const algaeMat = new THREE.MeshStandardMaterial({ color: 0x39512e, roughness: 0.95 })
+    const Z_AXIS = new THREE.Vector3(0, 0, 1)
+    for (let i = 0; i < 9; i++) {
+      const a = Math.random() * Math.PI * 2
+      const r = 0.18 + Math.random() * 0.55
+      const ux = Math.cos(a) * r
+      const uy = Math.sqrt(Math.max(0, 1 - r * r))
+      const uz = Math.sin(a) * r
+      // true normal of the oblate shell ellipsoid
+      const n = new THREE.Vector3(ux / 1.1025, uy / 0.16, uz / 1.7424).normalize()
+      const m = new THREE.Mesh(algaeGeo, algaeMat)
+      m.position.set(ux * 1.05 * 1.01, uy * 0.40 * 1.01, uz * 1.32 * 1.01)
+      m.quaternion.setFromUnitVectors(Z_AXIS, n)
+      m.scale.set(0.5 + Math.random() * 0.8, 0.35 + Math.random() * 0.6, 1)
+      g.add(m)
+    }
   }
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.24), darkMat)
-  mouth.position.set(0, -0.06, 0.4)
+
+  // head (joint pivot) with curved tube neck
+  const headPivot = new THREE.Group()
+  headPivot.position.set(0, 0.04, 1.38)
+  const neckCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, -0.06, -0.42),
+    new THREE.Vector3(0, -0.03, -0.20),
+    new THREE.Vector3(0, 0.0, 0.0),
+    new THREE.Vector3(0, 0.02, 0.08)
+  ])
+  const neckGeo = new THREE.TubeGeometry(neckCurve, 20, 0.13, 12)
+  {
+    const uvn = neckGeo.attributes.uv
+    const posn = neckGeo.attributes.position
+    for (let i = 0; i < posn.count; i++) {
+      const tt = uvn.getX(i)
+      const f = 1.15 - 0.4 * tt
+      const yc = -0.06 + tt * 0.08
+      posn.setX(i, posn.getX(i) * f)
+      posn.setY(i, yc + (posn.getY(i) - yc) * f * 0.75)
+    }
+    neckGeo.computeVertexNormals()
+  }
+  headPivot.add(new THREE.Mesh(neckGeo, skinMat))
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.21, 24, 16), skinMat)
+  skull.scale.set(0.95, 0.8, 1.32)
+  skull.position.set(0, 0.035, 0.14)
+  headPivot.add(skull)
+  const snout = new THREE.Mesh(new THREE.SphereGeometry(0.125, 20, 14), skinMat)
+  snout.scale.set(0.82, 0.6, 1.05)
+  snout.position.set(0, -0.012, 0.40)
+  headPivot.add(snout)
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.014, 0.30), darkMat)
+  mouth.position.set(0, -0.052, 0.38)
   headPivot.add(mouth)
+  // lower jaw: body + beak-like edge + upturned tip
+  const jawPivot = new THREE.Group()
+  jawPivot.position.set(0, -0.048, 0.28)
+  const jaw = new THREE.Mesh(new THREE.SphereGeometry(0.13, 18, 12), skinMat)
+  jaw.scale.set(0.8, 0.3, 0.95)
+  jaw.position.set(0, -0.028, 0.13)
+  jawPivot.add(jaw)
+  const jawEdge = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.012, 0.22), darkMat)
+  jawEdge.position.set(0, 0.012, 0.22)
+  jawPivot.add(jawEdge)
+  const jawTip = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), skinMat)
+  jawTip.scale.set(1.2, 0.6, 1.6)
+  jawTip.position.set(0, 0.005, 0.30)
+  jawPivot.add(jawTip)
+  headPivot.add(jawPivot)
+  const irisMat = new THREE.MeshStandardMaterial({ color: 0xc8a020, roughness: 0.45, metalness: 0.2 })
+  for (const side of [1, -1]) {
+    const nostril = new THREE.Mesh(new THREE.SphereGeometry(0.017, 8, 6), darkMat)
+    nostril.position.set(side * 0.033, 0.02, 0.52)
+    headPivot.add(nostril)
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.048, 16, 12), eyeMat)
+    eye.scale.set(1, 1.08, 0.95)
+    eye.position.set(side * 0.155, 0.08, 0.285)
+    headPivot.add(eye)
+    const shine = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), shineMat)
+    shine.position.set(side * 0.17, 0.112, 0.33)
+    headPivot.add(shine)
+    // golden iris ring around the eye
+    const iris = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.009, 8, 24), irisMat)
+    iris.position.copy(eye.position)
+    iris.rotation.y = side * (Math.PI / 2 - 0.35)
+    iris.rotation.x = -0.15
+    headPivot.add(iris)
+    // auditory opening (oval pit behind the eye)
+    const pit = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), darkMat)
+    pit.scale.set(0.3, 1.0, 0.75)
+    pit.position.set(side * 0.168, 0.04, 0.16)
+    headPivot.add(pit)
+  }
   g.add(headPivot)
 
-  // flippers (paddle shapes, front large / rear small)
-  const flippers = []
-  const mkPaddle = (w, h, d, len) => {
-    const geo = new THREE.BoxGeometry(len, h, d)
-    geo.translate(len / 2, 0, 0)
-    return geo
+  // shoulder / hip joints (bulges blending flippers into the shell)
+  for (const sx of [1, -1]) {
+    const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.16, 14, 10), skinMat)
+    shoulder.scale.set(1.0, 0.85, 1.3)
+    shoulder.position.set(sx * 0.58, -0.03, 0.30)
+    g.add(shoulder)
+    const hip = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 9), skinMat)
+    hip.scale.set(1.0, 0.85, 1.25)
+    hip.position.set(sx * 0.52, -0.03, -1.02)
+    g.add(hip)
   }
-  const frontGeo = mkPaddle(0.9, 0.07, 0.42, 0.9)
-  const rearGeo = mkPaddle(0.62, 0.055, 0.3, 0.62)
-  for (const [sx, sz] of [[-1, 1], [1, 1]]) {
+
+  // flippers (sculpted paddles, front large / rear small)
+  const frontGeo = makeFlipperGeometry(1.0, 0.42, 0.05)
+  const rearGeo = makeFlipperGeometry(0.6, 0.34, 0.04)
+  const flippers = []
+  for (const sx of [1, -1]) {
     const pivot = new THREE.Group()
-    pivot.position.set(sx * 0.72, -0.12, sz * 0.34)
-    pivot.rotation.y = sx > 0 ? 0 : Math.PI
+    pivot.position.set(sx * 0.60, -0.05, 0.30)
+    pivot.rotation.y = sx > 0 ? 0.55 : Math.PI + 0.55
     pivot.add(new THREE.Mesh(frontGeo, skinMat))
     g.add(pivot)
     flippers.push({ pivot, front: true, side: sx })
   }
-  for (const [sx, sz] of [[-1, -1], [1, -1]]) {
+  for (const sx of [1, -1]) {
     const pivot = new THREE.Group()
-    pivot.position.set(sx * 0.68, -0.12, sz * 0.32)
-    pivot.rotation.y = sx > 0 ? 0 : Math.PI
+    pivot.position.set(sx * 0.55, -0.05, -1.00)
+    pivot.rotation.y = sx > 0 ? 1.15 : Math.PI + 1.15
     pivot.add(new THREE.Mesh(rearGeo, skinMat))
     g.add(pivot)
     flippers.push({ pivot, front: false, side: sx })
   }
 
-  // tail (joint pivot)
+  // tail (base blend + joint pivot)
+  const tailBase = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 9), skinMat)
+  tailBase.scale.set(0.9, 0.7, 1.3)
+  tailBase.position.set(0, -0.02, -1.30)
+  g.add(tailBase)
   const tailPivot = new THREE.Group()
-  tailPivot.position.set(0, -0.05, -1.25)
-  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.45, 6), skinMat)
+  tailPivot.position.set(0, -0.03, -1.30)
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.44, 8), skinMat)
   tail.rotation.x = -Math.PI / 2
-  tail.position.z = -0.2
+  tail.position.z = -0.18
   tailPivot.add(tail)
   g.add(tailPivot)
 
-  g.scale.setScalar(1.2)
-  return { group: g, flippers, head: headPivot, tailPivot }
+  g.scale.setScalar(1.15)
+  return { group: g, flippers, head: headPivot, jaw: jawPivot, tailPivot }
 }
 
-function makeGull() {
+function makeGullBodyCanvas() {
+  const W = 128, H = 128
+  const c = makeCanvas(W, H)
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#f2f4f6'
+  ctx.fillRect(0, 0, W, H)
+  const back = ctx.createLinearGradient(0, 0, 0, H * 0.55)
+  back.addColorStop(0, 'rgba(138,148,158,0.85)')
+  back.addColorStop(1, 'rgba(138,148,158,0)')
+  ctx.fillStyle = back
+  ctx.fillRect(0, 0, W, H * 0.55)
+  for (let i = 0; i < 220; i++) {
+    const x = Math.random() * W, y = Math.random() * H * 0.5
+    ctx.fillStyle = `rgba(110,122,134,${0.05 + Math.random() * 0.1})`
+    ctx.fillRect(x, y, 1.5, 1)
+  }
+  return c
+}
+
+function makeGullWingCanvas() {
+  const W = 256, H = 128
+  const c = makeCanvas(W, H)
+  const ctx = c.getContext('2d')
+  const g = ctx.createLinearGradient(0, 0, W, 0)
+  g.addColorStop(0, '#eef1f3')
+  g.addColorStop(0.5, '#ccd3d9')
+  g.addColorStop(0.75, '#98a1aa')
+  g.addColorStop(0.82, '#4a525a')
+  g.addColorStop(0.9, '#262c32')
+  g.addColorStop(1, '#1c2126')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, W, H)
+  // feather separations, denser and more splayed toward the tip
+  for (let i = 0; i < 46; i++) {
+    const x = 14 + (i / 46) * (W - 20) + Math.random() * 3
+    const lean = 4 + (x / W) * 14
+    ctx.strokeStyle = `rgba(45,54,64,${0.08 + Math.random() * 0.1})`
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(x, 2)
+    ctx.lineTo(x - lean, H - 2)
+    ctx.stroke()
+  }
+  for (let i = 0; i < 300; i++) {
+    ctx.fillStyle = `rgba(255,255,255,${0.04 + Math.random() * 0.07})`
+    ctx.fillRect(Math.random() * W * 0.8, Math.random() * H, 1, 1)
+  }
+  return c
+}
+
+function makeGullBodyGeometry() {
+  // body of revolution: pointed breast -> plump middle -> narrow rear
+  const pts2d = [
+    [0.004, 0.34], [0.055, 0.30], [0.095, 0.22], [0.125, 0.10],
+    [0.135, -0.02], [0.115, -0.12], [0.075, -0.22], [0.035, -0.30], [0.004, -0.33]
+  ]
+  const curve = new THREE.CatmullRomCurve3(pts2d.map((p) => new THREE.Vector3(p[0], p[1], 0)))
+  const pts = curve.getPoints(24).map((p) => new THREE.Vector2(Math.max(0.002, p.x), p.y))
+  const geo = new THREE.LatheGeometry(pts, 20)
+  geo.rotateX(Math.PI / 2)
+  const p = geo.attributes.position
+  for (let i = 0; i < p.count; i++) p.setX(i, p.getX(i) * 0.85)
+  geo.computeVertexNormals()
+  return geo
+}
+
+function makeGullWingSegment(points) {
+  const s = new THREE.Shape()
+  s.moveTo(points[0][0], points[0][1])
+  for (let i = 1; i < points.length; i++) {
+    if (i < points.length - 1) {
+      const c = points[i]
+      const nx = points[i + 1][0], ny = points[i + 1][1]
+      s.quadraticCurveTo(c[0], c[1], (c[0] + nx) / 2, (c[1] + ny) / 2)
+    } else {
+      s.lineTo(points[i][0], points[i][1])
+    }
+  }
+  s.closePath()
+  const geo = new THREE.ShapeGeometry(s, 10)
+  geo.rotateX(Math.PI / 2)
+  const uv = geo.attributes.uv
+  let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity
+  for (let i = 0; i < uv.count; i++) {
+    const u = uv.getX(i), v = uv.getY(i)
+    if (u < minU) minU = u
+    if (u > maxU) maxU = u
+    if (v < minV) minV = v
+    if (v > maxV) maxV = v
+  }
+  for (let i = 0; i < uv.count; i++) {
+    uv.setXY(i, (uv.getX(i) - minU) / (maxU - minU), (uv.getY(i) - minV) / (maxV - minV))
+  }
+  return geo
+}
+
+// coverts / secondaries: body -> elbow
+const GULL_WING_INNER = [
+  [0, 0.03], [0.16, 0.13], [0.34, 0.17], [0.50, 0.17],
+  [0.62, 0.10], [0.64, -0.02], [0.52, -0.13], [0.30, -0.15], [0.08, -0.10]
+]
+// primaries: elbow -> tip
+const GULL_WING_OUTER = [
+  [0, 0.03], [0.22, 0.085], [0.42, 0.07], [0.54, 0.02],
+  [0.53, -0.05], [0.40, -0.10], [0.18, -0.11], [0.0, -0.06]
+]
+
+function makeGullCovertCanvas() {
+  const W = 256, H = 128
+  const c = makeCanvas(W, H)
+  const ctx = c.getContext('2d')
+  const g = ctx.createLinearGradient(0, 0, W, 0)
+  g.addColorStop(0, '#f4f6f8')
+  g.addColorStop(0.6, '#dde2e7')
+  g.addColorStop(1, '#b8c0c8')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, W, H)
+  // scalloped covert rows radiating from the shoulder
+  for (let k = 0; k < 7; k++) {
+    const r = 26 + k * 30
+    ctx.strokeStyle = `rgba(110,122,134,${0.30 - k * 0.035})`
+    ctx.lineWidth = 3
+    ctx.beginPath()
+    ctx.arc(0, H / 2, r, -1.15, 1.15)
+    ctx.stroke()
+  }
+  for (let i = 0; i < 260; i++) {
+    ctx.fillStyle = `rgba(255,255,255,${0.05 + Math.random() * 0.08})`
+    ctx.fillRect(Math.random() * W, Math.random() * H, 1, 1)
+  }
+  return c
+}
+
+function makeGull(texAssets) {
   const g = new THREE.Group()
-  const mat = new THREE.MeshStandardMaterial({ color: 0xf5f6f8, roughness: 0.7, side: THREE.DoubleSide })
-  const body = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.4, 5), mat)
-  body.rotateX(Math.PI / 2)
+  const bodyTex = toTexture(makeGullBodyCanvas())
+  const covertTex = toTexture(makeGullCovertCanvas())
+  const primaryTex = toTexture(makeGullWingCanvas())
+  if (texAssets) texAssets.push(bodyTex, covertTex, primaryTex)
+
+  const whiteMat = new THREE.MeshStandardMaterial({ map: bodyTex, roughness: 0.75 })
+  const covertMat = new THREE.MeshStandardMaterial({ map: covertTex, roughness: 0.7, side: THREE.DoubleSide })
+  const primaryMat = new THREE.MeshStandardMaterial({ map: primaryTex, roughness: 0.7, side: THREE.DoubleSide })
+  const beakMat = new THREE.MeshStandardMaterial({ color: 0xe09a1c, roughness: 0.5 })
+  const beakLowerMat = new THREE.MeshStandardMaterial({ color: 0x6a5638, roughness: 0.55 })
+  const beakTipMat = new THREE.MeshStandardMaterial({ color: 0x3a3f45, roughness: 0.5 })
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1d20, roughness: 0.35 })
+  const eyeRingMat = new THREE.MeshStandardMaterial({ color: 0x33383e, roughness: 0.6 })
+
+  // body of revolution (plump breast, narrow rear)
+  const body = new THREE.Mesh(makeGullBodyGeometry(), whiteMat)
   g.add(body)
-  const wingGeo = new THREE.PlaneGeometry(0.9, 0.28)
-  wingGeo.rotateX(Math.PI / 2)
-  wingGeo.translate(0.48, 0, 0)
-  const pivotL = new THREE.Group()
-  pivotL.add(new THREE.Mesh(wingGeo, mat))
-  const pivotR = new THREE.Group()
-  pivotR.rotation.y = Math.PI
-  pivotR.add(new THREE.Mesh(wingGeo.clone(), mat))
-  g.add(pivotL, pivotR)
-  return { group: g, pivotL, pivotR }
+
+  // tail fan: 5 slightly spread feathers, raised
+  const featherGeo = new THREE.PlaneGeometry(0.05, 0.21)
+  featherGeo.translate(0, -0.105, 0)
+  const tailPivot = new THREE.Group()
+  tailPivot.position.set(0, 0.02, -0.30)
+  for (let i = 0; i < 5; i++) {
+    const feather = new THREE.Mesh(featherGeo, whiteMat)
+    feather.rotation.set(1.92, (i - 2) * 0.26, 0)
+    tailPivot.add(feather)
+  }
+  g.add(tailPivot)
+
+  // curved neck (tube along an S-curve)
+  const neckCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 0.02, 0.24),
+    new THREE.Vector3(0, 0.09, 0.33),
+    new THREE.Vector3(0, 0.15, 0.42)
+  ])
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(neckCurve, 12, 0.05, 10), whiteMat))
+
+  // head + dark eye-ring + eyes
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.075, 14, 10), whiteMat)
+  head.scale.set(0.9, 0.95, 1.15)
+  head.position.set(0, 0.17, 0.47)
+  g.add(head)
+  for (const side of [1, -1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.014, 10, 8), eyeMat)
+    eye.position.set(side * 0.058, 0.185, 0.515)
+    g.add(eye)
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0045, 6, 20), eyeRingMat)
+    ring.position.copy(eye.position)
+    ring.rotation.y = side * Math.PI / 2
+    g.add(ring)
+  }
+  // beak: orange upper mandible + corythaide knob + dark lower mandible + black tip
+  const beakUpper = new THREE.Mesh(new THREE.ConeGeometry(0.021, 0.11, 8), beakMat)
+  beakUpper.rotation.x = Math.PI / 2 + 0.18
+  beakUpper.position.set(0, 0.165, 0.555)
+  g.add(beakUpper)
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.013, 8, 6), beakMat)
+  knob.position.set(0, 0.185, 0.535)
+  g.add(knob)
+  const beakTip = new THREE.Mesh(new THREE.ConeGeometry(0.010, 0.032, 8), beakTipMat)
+  beakTip.rotation.x = Math.PI / 2 + 0.18
+  beakTip.position.set(0, 0.149, 0.605)
+  g.add(beakTip)
+  const beakLower = new THREE.Mesh(new THREE.ConeGeometry(0.011, 0.075, 8), beakLowerMat)
+  beakLower.rotation.x = Math.PI / 2 + 0.30
+  beakLower.position.set(0, 0.152, 0.565)
+  g.add(beakLower)
+  // tucked legs
+  for (const side of [1, -1]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.08, 6), beakMat)
+    leg.rotation.x = Math.PI / 2
+    leg.position.set(side * 0.032, -0.11, -0.05)
+    g.add(leg)
+  }
+
+  // two-segment wings: shoulder pivot -> coverts -> elbow -> primaries
+  const innerGeo = makeGullWingSegment(GULL_WING_INNER)
+  const outerGeo = makeGullWingSegment(GULL_WING_OUTER)
+  const mkSide = (mirror) => {
+    const pivot = new THREE.Group()
+    pivot.position.set(mirror ? -0.05 : 0.05, 0.06, 0.06)
+    if (mirror) pivot.rotation.y = Math.PI
+    pivot.add(new THREE.Mesh(innerGeo, covertMat))
+    const elbow = new THREE.Group()
+    elbow.position.set(0.58, 0, 0.02)
+    elbow.add(new THREE.Mesh(outerGeo, primaryMat))
+    pivot.add(elbow)
+    g.add(pivot)
+    return { pivot, elbow }
+  }
+  const { pivot: pivotL, elbow: elbowL } = mkSide(false)
+  const { pivot: pivotR, elbow: elbowR } = mkSide(true)
+  return { group: g, pivotL, pivotR, elbowL, elbowR }
 }
 
 // ---------- scene ----------
@@ -1074,8 +2021,11 @@ export function useOceanScene(containerRef) {
       }
       geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
       geo.computeVertexNormals()
+      const sandTex = toTexture(makeSandCanvas())
+      sandTex.repeat.set(10, 10)
+      texAssets.push(sandTex)
       const floor = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-        vertexColors: true, roughness: 0.95, metalness: 0
+        map: sandTex, bumpMap: sandTex, bumpScale: 0.3, vertexColors: true, roughness: 0.95, metalness: 0
       }))
       floor.receiveShadow = true
       scene.add(floor)
@@ -1108,35 +2058,112 @@ export function useOceanScene(containerRef) {
     {
       const geo = new THREE.SphereGeometry(14, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2)
       geo.scale(1, 0.12, 1)
-      const island = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xd8c08a, roughness: 0.95 }))
+      const islandTex = toTexture(makeIslandCanvas())
+      texAssets.push(islandTex)
+      const island = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+        map: islandTex, bumpMap: islandTex, bumpScale: 0.3, roughness: 0.95
+      }))
       island.position.y = -0.5
       island.castShadow = true
       island.receiveShadow = true
       scene.add(island)
 
-      // palm trees
-      const palmGeo = makePalmFrondsGeometry()
-      const palmMat = new THREE.MeshStandardMaterial({ color: 0x2f8a4a, roughness: 0.8, side: THREE.DoubleSide })
-      const palms = [
-        [4.5, 0], [6.5, 1.2], [8, -2.5], [5.5, -4], [-6, 3], [-4, -5.5]
-      ]
-      for (const [dx, dz] of palms) {
+      // shoreline foam ring
+      const foam = new THREE.Mesh(
+        new THREE.TorusGeometry(13.5, 0.06, 6, 72),
+        new THREE.MeshBasicMaterial({ color: 0xf5fbff, transparent: true, opacity: 0.35, depthWrite: false })
+      )
+      foam.rotation.x = Math.PI / 2
+      foam.scale.set(1, 0.5, 1)
+      foam.position.y = -0.02
+      scene.add(foam)
+
+      // shrub clusters
+      const shrubColors = [0x3f7a45, 0x4a8a4f, 0x35703d]
+      const shrubSpots = [[2.5, 0.5], [-3, -2], [1, -4], [-2, 3.5], [4, 2.8], [-4.5, 1.5]]
+      for (let i = 0; i < shrubSpots.length; i++) {
+        const [dx, dz] = shrubSpots[i]
         const d = Math.hypot(dx, dz)
-        const palm = new THREE.Group()
-        const trunk = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.09, 0.17, 3.2, 6),
-          new THREE.MeshStandardMaterial({ color: 0x8a6a45, roughness: 0.9 })
-        )
-        trunk.position.y = 1.6
-        trunk.rotation.z = (Math.random() - 0.5) * 0.15
-        palm.add(trunk)
-        const crown = new THREE.Mesh(palmGeo, palmMat)
-        crown.position.y = 3.05
-        crown.rotation.y = Math.random() * Math.PI * 2
-        crown.castShadow = true
-        palm.add(crown)
-        palm.position.set(dx, islandTopY(d), dz)
-        scene.add(palm)
+        const bush = new THREE.Group()
+        const bmat = new THREE.MeshStandardMaterial({ color: shrubColors[i % 3], roughness: 0.9, flatShading: true })
+        for (let b = 0; b < 3; b++) {
+          const blob = new THREE.Mesh(new THREE.IcosahedronGeometry(0.4 + Math.random() * 0.25, 1), bmat)
+          blob.scale.set(1 + Math.random() * 0.4, 0.55 + Math.random() * 0.2, 1 + Math.random() * 0.4)
+          blob.position.set((Math.random() - 0.5) * 0.5, 0.22, (Math.random() - 0.5) * 0.5)
+          blob.castShadow = true
+          bush.add(blob)
+        }
+        bush.position.set(dx, islandTopY(d), dz)
+        scene.add(bush)
+      }
+
+      // palm trees (curved ringed trunks + leaflet fronds + coconuts)
+      {
+        const trunkTex = toTexture(makeTrunkCanvas())
+        texAssets.push(trunkTex)
+        const trunkMat = new THREE.MeshStandardMaterial({ map: trunkTex, bumpMap: trunkTex, bumpScale: 0.15, roughness: 0.9 })
+        const frondMat = new THREE.MeshStandardMaterial({ color: 0x2f8a4a, roughness: 0.8, side: THREE.DoubleSide })
+        const cocoMat = new THREE.MeshStandardMaterial({ color: 0x4a3826, roughness: 0.9 })
+        const cocoGeo = new THREE.SphereGeometry(0.09, 8, 6)
+        const palms = [
+          [4.5, 0], [6.5, 1.2], [8, -2.5], [5.5, -4], [-6, 3], [-4, -5.5]
+        ]
+        const m4 = new THREE.Matrix4()
+        for (const [dx, dz] of palms) {
+          const d = Math.hypot(dx, dz)
+          const palm = new THREE.Group()
+          const lean = 0.6 + Math.random() * 1.2
+          const trunkCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(0.04 * lean, 1.0, 0.02 * lean),
+            new THREE.Vector3(0.14 * lean, 2.0, 0.05 * lean),
+            new THREE.Vector3(0.26 * lean, 2.85, 0.08 * lean)
+          ])
+          const trunkGeo = new THREE.TubeGeometry(trunkCurve, 12, 0.11, 8)
+          {
+            const tv = trunkGeo.attributes.uv
+            const tp = trunkGeo.attributes.position
+            for (let i = 0; i < tp.count; i++) {
+              const tt = tv.getX(i)
+              const f = 1.3 - 0.75 * tt
+              const c = trunkCurve.getPoint(tt)
+              tp.setX(i, c.x + (tp.getX(i) - c.x) * f)
+              tp.setZ(i, c.z + (tp.getZ(i) - c.z) * f)
+            }
+            trunkGeo.computeVertexNormals()
+          }
+          const trunk = new THREE.Mesh(trunkGeo, trunkMat)
+          trunk.castShadow = true
+          palm.add(trunk)
+          // crown: 8 fronds merged into one mesh
+          const crownParts = []
+          for (let i = 0; i < 8; i++) {
+            const geo = makePalmFrondGeometry(Math.random() * 0.5, Math.random)
+            const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+              -0.08 + Math.random() * 0.18,
+              (i / 8) * Math.PI * 2 + Math.random() * 0.3,
+              0
+            ))
+            m4.compose(new THREE.Vector3(0, (i % 2) * 0.05, 0), q, new THREE.Vector3(1, 1, 1))
+            geo.applyMatrix4(m4)
+            crownParts.push(geo)
+          }
+          const crown = new THREE.Mesh(BufferGeometryUtils.mergeGeometries(crownParts), frondMat)
+          const crownPos = trunkCurve.getPoint(1)
+          crown.position.set(crownPos.x, crownPos.y + 0.02, crownPos.z)
+          crown.castShadow = true
+          palm.add(crown)
+          // coconuts
+          for (let k = 0; k < 3; k++) {
+            const a = Math.random() * Math.PI * 2
+            const coco = new THREE.Mesh(cocoGeo, cocoMat)
+            coco.position.set(crownPos.x + Math.cos(a) * 0.1, crownPos.y - 0.08, crownPos.z + Math.sin(a) * 0.1)
+            palm.add(coco)
+          }
+          palm.position.set(dx, islandTopY(d), dz)
+          palm.rotation.y = Math.random() * Math.PI * 2
+          scene.add(palm)
+        }
       }
       // boulders
       const rockGeo = new THREE.DodecahedronGeometry(0.6, 0)
@@ -1220,7 +2247,7 @@ export function useOceanScene(containerRef) {
     // ---- coral reef ----
     {
       const dummyRand = Math.random
-      const types = [0, 1, 2, 3].map((t) => ({
+      const types = [0, 1, 2, 3, 4].map((t) => ({
         geo: makeCoralGeometry(t, dummyRand),
         mat: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, flatShading: true, side: THREE.DoubleSide })
       }))
@@ -1276,7 +2303,7 @@ export function useOceanScene(containerRef) {
     // ---- fish schools (instanced) ----
     {
       const fishGeo = makeFishGeometry()
-      const fishMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45, metalness: 0.25 })
+      const fishMat = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.45, metalness: 0.25, side: THREE.DoubleSide })
       const schools = [
         { R: 20, y: -2.2, speed: 0.14, phase: 0, tint: 0xff8a3a, n: 60, scale: 1 },
         { R: 24, y: -3.2, speed: -0.1, phase: 2.4, tint: 0x4ab8ff, n: 60, scale: 1 },
@@ -1303,7 +2330,7 @@ export function useOceanScene(containerRef) {
 
     // ---- sea turtle ----
     {
-      const t = makeTurtle()
+      const t = makeTurtle(texAssets)
       scene.add(t.group)
       // surfacing bubble trail (pool)
       const bubbleCount = 20
@@ -1325,42 +2352,59 @@ export function useOceanScene(containerRef) {
       }
     }
 
-    // ---- jellyfish ----
-    for (let i = 0; i < 8; i++) {
-      const hue = [0xff7ab8, 0xc88aff, 0x7ad8ff, 0xff9a6a, 0x9affc8, 0x8aff9a, 0xffa0e0, 0xa0c8ff][i % 8]
-      const mat = new THREE.MeshStandardMaterial({
-        color: hue, emissive: hue, emissiveIntensity: 0.45,
-        transparent: true, opacity: 0.42, roughness: 0.3, side: THREE.DoubleSide
-      })
-      const g = new THREE.Group()
-      const bell = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat)
-      g.add(bell)
-      const tentMat = new THREE.MeshStandardMaterial({
-        color: hue, emissive: hue, emissiveIntensity: 0.3,
-        transparent: true, opacity: 0.3
-      })
-      for (let tIdx = 0; tIdx < 6; tIdx++) {
-        const tent = new THREE.Mesh(new THREE.BoxGeometry(0.022, 1.4, 0.022), tentMat)
-        const a = (tIdx / 6) * Math.PI * 2
-        tent.position.set(Math.cos(a) * 0.28, -0.7, Math.sin(a) * 0.28)
-        g.add(tent)
+    // ---- jellyfish (lathe bell + rim + core + GPU-swayed tentacles) ----
+    {
+      const hues = [0xff7ab8, 0xc88aff, 0x7ad8ff, 0xff9a6a, 0x9affc8, 0x8aff9a, 0xffa0e0, 0xa0c8ff]
+      const bellGeo = makeJellyBellGeometry()
+      for (let i = 0; i < 8; i++) {
+        const hue = hues[i % 8]
+        const bellMat = new THREE.MeshStandardMaterial({
+          color: hue, emissive: hue, emissiveIntensity: 0.45,
+          transparent: true, opacity: 0.42, roughness: 0.3, side: THREE.DoubleSide
+        })
+        const coreMat = new THREE.MeshStandardMaterial({
+          color: hue, emissive: hue, emissiveIntensity: 0.9,
+          transparent: true, opacity: 0.5, roughness: 0.3, side: THREE.DoubleSide
+        })
+        const tentMat = makeJellyTentMat(hue)
+        const g = new THREE.Group()
+        g.add(new THREE.Mesh(bellGeo, bellMat))
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.03, 8, 32), bellMat)
+        rim.position.y = -0.05
+        g.add(rim)
+        const core = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), coreMat)
+        core.scale.set(1, 0.85, 1)
+        core.position.y = 0.16
+        g.add(core)
+        // 8 thin tentacles + 4 thick oral arms, merged into one sway-animated mesh
+        const tentParts = []
+        for (let tIdx = 0; tIdx < 8; tIdx++) {
+          const a = (tIdx / 8) * Math.PI * 2
+          tentParts.push(makeTentacleGeometry(Math.cos(a) * 0.45, Math.sin(a) * 0.45, 0.016, 1.5, 0.5))
+        }
+        for (let aIdx = 0; aIdx < 4; aIdx++) {
+          const a = (aIdx / 4) * Math.PI * 2 + 0.4
+          tentParts.push(makeTentacleGeometry(Math.cos(a) * 0.16, Math.sin(a) * 0.16, 0.045, 0.8, 1.2))
+        }
+        g.add(new THREE.Mesh(BufferGeometryUtils.mergeGeometries(tentParts, false), tentMat))
+        scene.add(g)
+        jellies.push({
+          group: g,
+          tentMat,
+          base: new THREE.Vector3(
+            Math.cos(i * 2.2) * (18 + (i % 3) * 7),
+            -1.2 - (i % 3) * 0.8,
+            Math.sin(i * 2.2) * (18 + (i % 3) * 7)
+          ),
+          phase: Math.random() * Math.PI * 2,
+          drift: 0.15 + Math.random() * 0.15
+        })
       }
-      scene.add(g)
-      jellies.push({
-        group: g,
-        base: new THREE.Vector3(
-          Math.cos(i * 2.2) * (18 + (i % 3) * 7),
-          -1.2 - (i % 3) * 0.8,
-          Math.sin(i * 2.2) * (18 + (i % 3) * 7)
-        ),
-        phase: Math.random() * Math.PI * 2,
-        drift: 0.15 + Math.random() * 0.15
-      })
     }
 
     // ---- gulls ----
     for (let i = 0; i < 7; i++) {
-      const gull = makeGull()
+      const gull = makeGull(texAssets)
       scene.add(gull.group)
       gulls.push({
         ...gull,
@@ -1418,6 +2462,7 @@ export function useOceanScene(containerRef) {
     const _v = new THREE.Vector3()
     const _n = new THREE.Vector3()
     const _q = new THREE.Quaternion()
+    const _qt = new THREE.Quaternion()
     const Z_AXIS = new THREE.Vector3(0, 0, 1)
     const dummy = new THREE.Object3D()
 
@@ -1432,12 +2477,16 @@ export function useOceanScene(containerRef) {
       orbit.autoRotate = autoRotate.value
       if (waterMat) waterMat.uniforms.uTime.value = t
       if (kelpWindShader) kelpWindShader.uniforms.uTime.value = t
+      for (const j of jellies) {
+        const sh = j.tentMat?.userData.shader
+        if (sh) sh.uniforms.uTime.value = t
+      }
       if (beamGroup) {
         beamGroup.rotation.y = t * 0.9
         lampLight.intensity = 100 + 60 * Math.max(0, Math.sin(t * 0.9 * 2))
       }
 
-      // fish schools
+      // fish schools (with swim undulation)
       for (const sc of fishSchools) {
         const a = t * sc.speed + sc.phase
         const cx = Math.cos(a) * sc.R
@@ -1454,6 +2503,8 @@ export function useOceanScene(containerRef) {
             cz + o.x * Math.sin(a) + o.z * Math.cos(a)
           )
           dummy.quaternion.copy(_q)
+          _qt.setFromAxisAngle(Z_AXIS, Math.sin(t * 7 + i * 0.9 + sc.phase) * 0.16)
+          dummy.quaternion.multiply(_qt)
           dummy.scale.setScalar((0.8 + (i % 5) * 0.08) * sc.scale)
           dummy.updateMatrix()
           sc.im.setMatrixAt(i, dummy.matrix)
@@ -1466,20 +2517,21 @@ export function useOceanScene(containerRef) {
         const diveT = (Math.sin(t * 0.28 + 5.5) + 1) / 2
         const rising = diveT < turtle.diveT
         turtle.diveT = diveT
-        const radius = 16.5 + (1 - diveT) * 6.5
+        const radius = 20 + (1 - diveT) * 7
         const ta = t * 0.08
         const tx = Math.cos(ta) * radius
         const tz = Math.sin(ta) * radius
-        let ty = -1.7 - diveT * 2.3 + Math.sin(t * 0.4) * 0.25
+        let ty = -1.2 - diveT * 1.6 + Math.sin(t * 0.4) * 0.2
         ty = Math.max(ty, floorHeight(tx, tz) + 1.1)
         turtle.group.position.set(tx, ty, tz)
         _n.set(-Math.sin(ta), 0, Math.cos(ta))
         _q.setFromUnitVectors(Z_AXIS, _n)
         turtle.group.quaternion.copy(_q)
         turtle.group.rotateZ(0.12 + diveT * 0.18)
-        // head: turn + dive/surface nod
+        // head: turn + dive/surface nod, slow jaw breathing
         turtle.head.rotation.y = Math.sin(t * 0.5) * 0.18
         turtle.head.rotation.x = (0.5 - diveT) * 0.6 + Math.sin(t * 0.3) * 0.08
+        turtle.jaw.rotation.x = 0.045 + 0.05 * (0.5 + 0.5 * Math.sin(t * 0.55))
         // flippers: front crawl (asymmetric stroke), rear opposite small
         const p = t * 2.1
         const stroke = Math.sin(p) * (0.6 - 0.4 * Math.sin(p))
@@ -1536,14 +2588,16 @@ export function useOceanScene(containerRef) {
         j.group.rotation.y = t * 0.2 + j.phase
       }
 
-      // gulls
+      // gulls (shoulder + elbow wing kinematics)
       for (const g of gulls) {
         const a = t * g.speed + g.phase
         g.group.position.set(Math.cos(a) * g.R, g.y + Math.sin(t * 0.7 + g.phase) * 0.6, Math.sin(a) * g.R)
         g.group.rotation.y = -a
         const flap = Math.sin(t * 7 + g.phase) * 0.5
-        g.pivotL.rotation.z = 0.2 + flap
-        g.pivotR.rotation.z = 0.2 + flap
+        g.pivotL.rotation.z = 0.15 + flap
+        g.pivotR.rotation.z = 0.15 + flap
+        g.elbowL.rotation.z = 0.30 + flap * 0.7
+        g.elbowR.rotation.z = 0.30 + flap * 0.7
       }
 
       // bubbles
