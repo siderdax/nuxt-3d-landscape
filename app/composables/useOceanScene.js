@@ -209,6 +209,616 @@ function makeCoralGeometry(type, dummyRand) {
   return BufferGeometryUtils.mergeGeometries(parts, false)
 }
 
+// ---------- weathered lighthouse textures ----------
+
+function makeCanvas(w, h) {
+  const c = document.createElement('canvas')
+  c.width = w
+  c.height = h
+  return c
+}
+
+function toTexture(canvas, sx = 1) {
+  const t = new THREE.CanvasTexture(canvas)
+  t.colorSpace = THREE.SRGBColorSpace
+  t.wrapS = THREE.RepeatWrapping
+  t.repeat.set(sx, 1)
+  t.anisotropy = 4
+  return t
+}
+
+function makeTowerCanvas() {
+  const W = 512, H = 1024
+  const c = makeCanvas(W, H)
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#ddd5c0'
+  ctx.fillRect(0, 0, W, H)
+  const wrap = (x, fn) => {
+    for (const ox of [-W, 0, W]) {
+      ctx.save()
+      ctx.translate(ox, 0)
+      fn()
+      ctx.restore()
+    }
+  }
+  // faded sun / grime patches
+  for (let i = 0; i < 16; i++) {
+    const x = Math.random() * W
+    const y = Math.random() * H
+    const r = 70 + Math.random() * 170
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+    g.addColorStop(0, Math.random() > 0.5 ? 'rgba(255,252,238,0.12)' : 'rgba(115,112,92,0.12)')
+    g.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = g
+    ctx.fillRect(x - r, y - r, r * 2, r * 2)
+  }
+  // horizontal formwork lines
+  for (let y = 32; y < H; y += 64) {
+    ctx.fillStyle = 'rgba(92,86,68,0.20)'
+    ctx.fillRect(0, y, W, 2)
+    ctx.fillStyle = 'rgba(255,252,240,0.12)'
+    ctx.fillRect(0, y + 2, W, 1)
+  }
+  // rain / rust streaks
+  for (let i = 0; i < 110; i++) {
+    const x = Math.random() * W
+    const y0 = Math.random() * 380
+    const len = 140 + Math.random() * 700
+    const w = 1 + Math.random() * 3
+    const a = 0.04 + Math.random() * 0.10
+    const rust = Math.random() < 0.24
+    const top = rust ? `rgba(138,84,46,${Math.min(1, a * 1.8)})` : `rgba(90,94,80,${a})`
+    wrap(x, () => {
+      const g = ctx.createLinearGradient(0, y0, 0, y0 + len)
+      g.addColorStop(0, top)
+      g.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = g
+      ctx.fillRect(x, y0, w, len)
+    })
+  }
+  // grime build-up at the bottom
+  const gB = ctx.createLinearGradient(0, H, 0, H - 260)
+  gB.addColorStop(0, 'rgba(66,68,56,0.42)')
+  gB.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = gB
+  ctx.fillRect(0, H - 260, W, 260)
+  // peeling paint patches
+  for (let i = 0; i < 46; i++) {
+    const x = Math.random() * W
+    const y = 320 + Math.random() * 704
+    const w = 3 + Math.random() * 15
+    const h = 3 + Math.random() * 11
+    const dark = Math.random() < 0.55
+    const col = dark ? `rgba(110,94,72,${0.25 + Math.random() * 0.3})` : `rgba(240,234,216,${0.3 + Math.random() * 0.35})`
+    wrap(x, () => {
+      ctx.fillStyle = col
+      ctx.fillRect(x, y, w, h)
+    })
+  }
+  // grain
+  for (let i = 0; i < 2200; i++) {
+    const x = Math.random() * W
+    const y = Math.random() * H
+    ctx.fillStyle = `rgba(${Math.random() > 0.5 ? '58,58,48' : '255,255,245'},${0.02 + Math.random() * 0.05})`
+    ctx.fillRect(x, y, 1, 1)
+  }
+  return c
+}
+
+function makeBandCanvas() {
+  const W = 512, H = 128
+  const c = makeCanvas(W, H)
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#9c3125'
+  ctx.fillRect(0, 0, W, H)
+  const wrap = (x, fn) => {
+    for (const ox of [-W, 0, W]) {
+      ctx.save()
+      ctx.translate(ox, 0)
+      fn()
+      ctx.restore()
+    }
+  }
+  for (let i = 0; i < 9; i++) {
+    const x = Math.random() * W
+    const y = Math.random() * H
+    const r = 40 + Math.random() * 90
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+    g.addColorStop(0, Math.random() > 0.5 ? 'rgba(150,52,38,0.25)' : 'rgba(70,22,14,0.25)')
+    g.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = g
+    ctx.fillRect(x - r, y - r, r * 2, r * 2)
+  }
+  for (let i = 0; i < 70; i++) {
+    const x = Math.random() * W
+    const y0 = Math.random() * 40
+    const len = 30 + Math.random() * 90
+    const w = 1 + Math.random() * 2.5
+    const dark = Math.random() < 0.6
+    const a = 0.05 + Math.random() * 0.13
+    wrap(x, () => {
+      const g = ctx.createLinearGradient(0, y0, 0, y0 + len)
+      g.addColorStop(0, dark ? `rgba(52,20,12,${a})` : `rgba(226,190,150,${a * 0.7})`)
+      g.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = g
+      ctx.fillRect(x, y0, w, len)
+    })
+  }
+  // chips showing the undercoat
+  for (let i = 0; i < 64; i++) {
+    const x = Math.random() * W
+    const y = Math.random() * H
+    const w = 2 + Math.random() * 7
+    const h = 2 + Math.random() * 6
+    wrap(x, () => {
+      ctx.fillStyle = `rgba(228,220,200,${0.35 + Math.random() * 0.5})`
+      ctx.fillRect(x, y, w, h)
+    })
+  }
+  // dark edges
+  ctx.fillStyle = 'rgba(38,16,10,0.5)'
+  ctx.fillRect(0, 0, W, 3)
+  ctx.fillRect(0, H - 3, W, 3)
+  for (let i = 0; i < 900; i++) {
+    const x = Math.random() * W
+    const y = Math.random() * H
+    ctx.fillStyle = `rgba(${Math.random() > 0.5 ? '40,18,12' : '255,235,210'},${0.03 + Math.random() * 0.05})`
+    ctx.fillRect(x, y, 1, 1)
+  }
+  return c
+}
+
+function makeStoneCanvas() {
+  const S = 256
+  const c = makeCanvas(S, S)
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#4e4c44'
+  ctx.fillRect(0, 0, S, S)
+  const rows = [
+    { y: 0, h: 64, w: [58, 72, 44, 82] },
+    { y: 64, h: 60, w: [90, 48, 62, 56] },
+    { y: 124, h: 68, w: [40, 88, 60, 68] },
+    { y: 192, h: 64, w: [76, 52, 70, 58] }
+  ]
+  rows.forEach((row, ri) => {
+    let x = 0
+    row.w.forEach((bw, bi) => {
+      const l = 98 + ((ri * 37 + bi * 53) % 42)
+      ctx.fillStyle = `rgb(${l},${l - 3},${l - 10})`
+      ctx.fillRect(x + 2, row.y + 2, bw - 4, row.h - 4)
+      for (let i = 0; i < 5; i++) {
+        const mx = x + 4 + ((bi * 71 + ri * 13 + i * 29) % Math.max(1, bw - 12))
+        const my = row.y + 4 + ((bi * 41 + ri * 17 + i * 53) % Math.max(1, row.h - 12))
+        ctx.fillStyle = `rgba(30,30,26,${0.08 + (i % 3) * 0.04})`
+        ctx.fillRect(mx, my, 5 + (i % 4) * 3, 4 + (i % 3) * 3)
+      }
+      ctx.fillStyle = 'rgba(255,255,240,0.08)'
+      ctx.fillRect(x + 2, row.y + 2, bw - 4, 2)
+      x += bw
+    })
+  })
+  for (let i = 0; i < 700; i++) {
+    const x = Math.random() * S
+    const y = Math.random() * S
+    ctx.fillStyle = `rgba(${Math.random() > 0.5 ? '25,25,20' : '255,255,240'},${0.02 + Math.random() * 0.04})`
+    ctx.fillRect(x, y, 1, 1)
+  }
+  return c
+}
+
+function makeWoodCanvas(base = '#6d5c45') {
+  const S = 256
+  const c = makeCanvas(S, S)
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = base
+  ctx.fillRect(0, 0, S, S)
+  for (let py = 0; py < S; py += 32) {
+    const l = Math.round((Math.random() - 0.5) * 20)
+    ctx.fillStyle = `rgba(${105 + l},${88 + l},${66 + l},0.35)`
+    ctx.fillRect(0, py, S, 32)
+    ctx.fillStyle = 'rgba(28,22,14,0.55)'
+    ctx.fillRect(0, py, S, 2)
+    ctx.fillRect((py * 73) % S, py, 2, 32)
+  }
+  for (let i = 0; i < 55; i++) {
+    const x = Math.random() * S
+    ctx.strokeStyle = `rgba(44,35,23,${0.05 + Math.random() * 0.09})`
+    ctx.beginPath()
+    ctx.moveTo(x, 0)
+    for (let y = 16; y <= S; y += 16) ctx.lineTo(x + Math.sin(y * 0.09 + i) * 3, y)
+    ctx.stroke()
+  }
+  for (let i = 0; i < 22; i++) {
+    const x = Math.random() * S
+    const y = Math.random() * S
+    const r = 14 + Math.random() * 44
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+    g.addColorStop(0, 'rgba(168,170,160,0.13)')
+    g.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = g
+    ctx.fillRect(x - r, y - r, r * 2, r * 2)
+  }
+  for (let i = 0; i < 16; i++) {
+    ctx.fillStyle = 'rgba(32,29,24,0.8)'
+    ctx.beginPath()
+    ctx.arc(Math.random() * S, Math.random() * S, 1.3, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  return c
+}
+
+function makeRoofCanvas() {
+  const S = 256
+  const c = makeCanvas(S, S)
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#6d281d'
+  ctx.fillRect(0, 0, S, S)
+  const wrap = (x, fn) => {
+    for (const ox of [-S, 0, S]) {
+      ctx.save()
+      ctx.translate(ox, 0)
+      fn()
+      ctx.restore()
+    }
+  }
+  for (let i = 0; i < 10; i++) {
+    const x = Math.random() * S
+    const y = Math.random() * S
+    const r = 30 + Math.random() * 70
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+    g.addColorStop(0, Math.random() > 0.5 ? 'rgba(120,44,30,0.3)' : 'rgba(40,14,8,0.3)')
+    g.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = g
+    ctx.fillRect(x - r, y - r, r * 2, r * 2)
+  }
+  for (let i = 0; i < 40; i++) {
+    const x = Math.random() * S
+    const w = 1 + Math.random() * 3
+    const a = 0.06 + Math.random() * 0.13
+    wrap(x, () => {
+      const g = ctx.createLinearGradient(0, 0, 0, S)
+      g.addColorStop(0, `rgba(28,10,6,${a})`)
+      g.addColorStop(0.75, `rgba(28,10,6,${a * 0.6})`)
+      g.addColorStop(1, `rgba(70,95,58,${a * 0.9})`)
+      ctx.fillStyle = g
+      ctx.fillRect(x, 0, w, S)
+    })
+  }
+  for (let i = 0; i < 800; i++) {
+    const x = Math.random() * S
+    const y = Math.random() * S
+    ctx.fillStyle = `rgba(${Math.random() > 0.5 ? '26,10,6' : '255,225,200'},${0.02 + Math.random() * 0.04})`
+    ctx.fillRect(x, y, 1, 1)
+  }
+  return c
+}
+
+// ---------- detailed lighthouse ----------
+
+const LH_ANCHOR_X = 2
+const LH_ANCHOR_Z = -2
+
+function makeLighthouse(texAssets) {
+  const g = new THREE.Group()
+  const AX = LH_ANCHOR_X
+  const AZ = LH_ANCHOR_Z
+  g.position.set(AX, islandTopY(Math.hypot(AX, AZ)) - 0.04, AZ)
+  const gy = (wx, wz) => islandTopY(Math.hypot(wx, wz)) - g.position.y
+
+  // weathered procedural textures
+  const towerTex = toTexture(makeTowerCanvas())
+  const bandTex = toTexture(makeBandCanvas())
+  const stoneTex = toTexture(makeStoneCanvas(), 3)
+  const woodTex = toTexture(makeWoodCanvas())
+  const fenceTex = toTexture(makeWoodCanvas('#8a8272'))
+  const roofTex = toTexture(makeRoofCanvas())
+  texAssets.push(towerTex, bandTex, stoneTex, woodTex, fenceTex, roofTex)
+
+  const stoneMat = new THREE.MeshStandardMaterial({ map: stoneTex, bumpMap: stoneTex, bumpScale: 0.4, roughness: 0.95 })
+  const paintMat = new THREE.MeshStandardMaterial({ map: towerTex, bumpMap: towerTex, bumpScale: 0.3, roughness: 0.72 })
+  const bandMat = new THREE.MeshStandardMaterial({ map: bandTex, bumpMap: bandTex, bumpScale: 0.3, roughness: 0.7 })
+  const roofMat = new THREE.MeshStandardMaterial({ map: roofTex, bumpMap: roofTex, bumpScale: 0.35, roughness: 0.78 })
+  const woodMat = new THREE.MeshStandardMaterial({ map: woodTex, bumpMap: woodTex, bumpScale: 0.35, roughness: 0.85 })
+  const fenceMat = new THREE.MeshStandardMaterial({ map: fenceTex, bumpMap: fenceTex, bumpScale: 0.35, roughness: 0.9 })
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x333a42, roughness: 0.55, metalness: 0.4 })
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0xa8c8d8, roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false })
+  const winGlassMat = new THREE.MeshStandardMaterial({ color: 0x16242e, roughness: 0.2, metalness: 0.55 })
+
+  const add = (mesh, cast = true) => {
+    mesh.castShadow = cast
+    mesh.receiveShadow = true
+    g.add(mesh)
+    return mesh
+  }
+
+  // stone terrace + rim
+  const terrace = add(new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.55, 0.5, 26), stoneMat))
+  terrace.position.y = 0.25
+  const trim = add(new THREE.Mesh(new THREE.CylinderGeometry(2.36, 2.4, 0.14, 26), stoneMat))
+  trim.position.y = 0.57
+  const ring = add(new THREE.Mesh(new THREE.CylinderGeometry(0.92, 1.04, 0.34, 18), stoneMat))
+  ring.position.y = 0.72
+
+  // tower (jittered profile for a hand-built look)
+  const TOWER_Y0 = 0.89
+  const TOWER_H = 3.81
+  const towerR = (y) => 0.78 - 0.26 * ((y - TOWER_Y0) / TOWER_H)
+  const towerGeo = new THREE.CylinderGeometry(0.52, 0.78, TOWER_H, 30, 14)
+  {
+    const p = towerGeo.attributes.position
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i)
+      const y = p.getY(i)
+      const z = p.getZ(i)
+      const a = Math.atan2(z, x)
+      const s = 1 + 0.014 * Math.sin(a * 3 + 1.7) + 0.01 * Math.sin(a * 7 - 0.6) + 0.007 * Math.sin(y * 2.3 + a * 5 + 0.8)
+      p.setX(i, x * s)
+      p.setZ(i, z * s)
+    }
+    towerGeo.computeVertexNormals()
+  }
+  const tower = add(new THREE.Mesh(towerGeo, paintMat))
+  tower.position.y = TOWER_Y0 + TOWER_H / 2
+
+  const band = (y0, y1, off) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(towerR(y1) + off, towerR(y0) + off, y1 - y0, 30), bandMat)
+    m.position.y = (y0 + y1) / 2
+    add(m)
+  }
+  band(1.95, 2.55, 0.03)
+  band(3.95, 4.45, 0.03)
+  band(3.3, 3.42, 0.025)
+
+  // cornice, gallery deck, corbels, railing
+  const cornice = add(new THREE.Mesh(new THREE.CylinderGeometry(0.63, 0.74, 0.16, 20), paintMat))
+  cornice.position.y = 4.78
+  const deck = add(new THREE.Mesh(new THREE.CylinderGeometry(1.02, 1.1, 0.16, 24), darkMat))
+  deck.position.y = 4.94
+  for (let i = 0; i < 8; i++) {
+    const th = (i / 8) * Math.PI * 2 + Math.PI / 8
+    const cg = new THREE.Group()
+    cg.position.set(Math.sin(th) * 0.5, 4.72, Math.cos(th) * 0.5)
+    cg.rotation.y = th
+    const cb = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.07, 0.52), darkMat)
+    cb.position.z = 0.26
+    cb.rotation.x = -0.5
+    cb.castShadow = true
+    cg.add(cb)
+    g.add(cg)
+  }
+  for (let i = 0; i < 14; i++) {
+    const th = (i / 14) * Math.PI * 2
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.02, 0.5, 6), darkMat)
+    post.position.set(Math.sin(th) * 0.95, 5.27, Math.cos(th) * 0.95)
+    add(post)
+  }
+  const railTop = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.018, 6, 28), darkMat)
+  railTop.rotation.x = Math.PI / 2
+  railTop.position.y = 5.5
+  add(railTop)
+  const railMid = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.013, 6, 28), darkMat)
+  railMid.rotation.x = Math.PI / 2
+  railMid.position.y = 5.26
+  add(railMid)
+
+  // lantern room
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.64, 12, 1, true), glassMat)
+  glass.position.y = 5.34
+  g.add(glass)
+  for (let i = 0; i < 8; i++) {
+    const th = (i / 8) * Math.PI * 2
+    const mull = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.64, 0.06), darkMat)
+    mull.position.set(Math.sin(th) * 0.45, 5.34, Math.cos(th) * 0.45)
+    mull.rotation.y = th
+    add(mull)
+  }
+  const lampMat = new THREE.MeshStandardMaterial({ color: 0xfff2d0, emissive: 0xffc266, emissiveIntensity: 2.4, roughness: 0.3 })
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 10), lampMat)
+  lamp.position.y = 5.34
+  g.add(lamp)
+  const topRing = add(new THREE.Mesh(new THREE.CylinderGeometry(0.53, 0.47, 0.1, 18), darkMat))
+  topRing.position.y = 5.71
+
+  // roof + finial
+  const roof = add(new THREE.Mesh(new THREE.ConeGeometry(0.68, 0.6, 18), roofMat))
+  roof.position.y = 6.06
+  const finialBall = add(new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), darkMat), false)
+  finialBall.position.y = 6.38
+  const finialRing = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.013, 6, 12), darkMat)
+  finialRing.rotation.x = Math.PI / 2
+  finialRing.position.y = 6.3
+  add(finialRing)
+  const spire = add(new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.32, 6), darkMat), false)
+  spire.position.y = 6.52
+
+  // beam + lamp light
+  const beamGroup = new THREE.Group()
+  beamGroup.position.y = 5.34
+  const beamMat = new THREE.MeshBasicMaterial({
+    color: 0xffe8b0, transparent: true, opacity: 0.13,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+  })
+  const beamGeo = new THREE.CylinderGeometry(1.9, 0.04, 15, 10, 1, true)
+  const beam1 = new THREE.Mesh(beamGeo, beamMat)
+  beam1.rotation.x = Math.PI / 2
+  beam1.position.z = 7.5
+  beamGroup.add(beam1)
+  const beam2 = new THREE.Mesh(beamGeo, beamMat)
+  beam2.rotation.x = -Math.PI / 2
+  beam2.position.z = -7.5
+  beamGroup.add(beam2)
+  g.add(beamGroup)
+  const lampLight = new THREE.PointLight(0xffd9a0, 120, 70, 2)
+  lampLight.position.y = 5.34
+  g.add(lampLight)
+
+  // door (facing +z) with arch, steps
+  const dz = towerR(1.61) + 0.01
+  const doorFrame = add(new THREE.Mesh(new THREE.BoxGeometry(0.62, 1.2, 0.1), paintMat))
+  doorFrame.position.set(0, 1.61, dz)
+  const arch = add(new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.05, 6, 14, Math.PI), paintMat), false)
+  arch.position.set(0, 2.05, dz)
+  const door = add(new THREE.Mesh(new THREE.BoxGeometry(0.46, 1.0, 0.06), woodMat))
+  door.position.set(0, 1.55, dz + 0.045)
+  const doorWin = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.03, 10), winGlassMat)
+  doorWin.rotation.x = Math.PI / 2
+  doorWin.position.set(0, 1.75, dz + 0.08)
+  g.add(doorWin)
+  const handle = new THREE.Mesh(new THREE.SphereGeometry(0.024, 6, 5), darkMat)
+  handle.position.set(0.15, 1.45, dz + 0.08)
+  g.add(handle)
+  const step1 = add(new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.18, 0.52), stoneMat))
+  step1.position.set(0, 0.59, 1.32)
+  const step2 = add(new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.16, 0.4), stoneMat))
+  step2.position.set(0, 0.76, 1.2)
+  const step3 = add(new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.14, 0.3), stoneMat))
+  step3.position.set(0, 0.93, 1.1)
+
+  // windows
+  const addWindow = (th, y, w = 0.24, h = 0.34) => {
+    const r = towerR(y)
+    const wg = new THREE.Group()
+    wg.rotation.y = th
+    const trimW = new THREE.Mesh(new THREE.BoxGeometry(w + 0.08, h + 0.08, 0.05), paintMat)
+    trimW.position.set(0, y, r + 0.02)
+    trimW.castShadow = true
+    wg.add(trimW)
+    const pane = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.055), winGlassMat)
+    pane.position.set(0, y, r + 0.025)
+    wg.add(pane)
+    g.add(wg)
+  }
+  addWindow(Math.PI / 2, 2.7)
+  addWindow(-Math.PI / 2, 2.2)
+  addWindow(Math.PI * 0.8, 3.6, 0.2, 0.28)
+
+  // keeper's shed
+  const shed = new THREE.Group()
+  {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.85, 1.0), woodMat)
+    body.position.y = 0.425
+    body.castShadow = true
+    body.receiveShadow = true
+    shed.add(body)
+    const shape = new THREE.Shape([
+      new THREE.Vector2(-0.68, 0),
+      new THREE.Vector2(0.68, 0),
+      new THREE.Vector2(0, 0.46)
+    ])
+    const gableGeo = new THREE.ExtrudeGeometry(shape, { depth: 1.04, bevelEnabled: false })
+    gableGeo.translate(0, 0, -0.52)
+    const gable = new THREE.Mesh(gableGeo, woodMat)
+    gable.position.y = 0.85
+    gable.castShadow = true
+    shed.add(gable)
+    for (const s of [1, -1]) {
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.05, 1.14), roofMat)
+      panel.position.set(s * 0.34, 1.08, 0)
+      panel.rotation.z = s === 1 ? Math.PI - 0.592 : 0.592
+      panel.castShadow = true
+      shed.add(panel)
+    }
+    const sdoor = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.56, 0.05), woodMat)
+    sdoor.position.set(0.32, 0.28, 0.51)
+    shed.add(sdoor)
+    const swin = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.26, 0.05), winGlassMat)
+    swin.position.set(-0.3, 0.45, 0.51)
+    shed.add(swin)
+    const swinH = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.025, 0.06), paintMat)
+    swinH.position.set(-0.3, 0.45, 0.515)
+    shed.add(swinH)
+    const swinV = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.26, 0.06), paintMat)
+    swinV.position.set(-0.3, 0.45, 0.515)
+    shed.add(swinV)
+    const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.55, 0.18), stoneMat)
+    chimney.position.set(0.38, 1.15, -0.25)
+    chimney.castShadow = true
+    shed.add(chimney)
+    const plinth = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.14, 1.12), stoneMat)
+    plinth.position.y = 0.07
+    plinth.castShadow = true
+    plinth.receiveShadow = true
+    shed.add(plinth)
+  }
+  shed.position.set(3.4, gy(AX + 3.4, AZ + 2.9) - 0.05, 2.9)
+  shed.rotation.y = -2.14
+  g.add(shed)
+
+  // barrel + crate
+  const barrel = new THREE.Group()
+  {
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.19, 0.34, 10), woodMat)
+    b.position.y = 0.17
+    b.castShadow = true
+    barrel.add(b)
+    for (const yy of [0.08, 0.26]) {
+      const ringB = new THREE.Mesh(new THREE.TorusGeometry(0.185, 0.012, 5, 12), darkMat)
+      ringB.rotation.x = Math.PI / 2
+      ringB.position.y = yy
+      barrel.add(ringB)
+    }
+  }
+  barrel.position.set(3.9, gy(AX + 3.9, AZ + 1.6) - 0.02, 1.6)
+  g.add(barrel)
+  const crate = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.34, 0.34), woodMat)
+  crate.position.set(2.4, gy(AX + 2.4, AZ + 3.4) + 0.15, 3.4)
+  crate.rotation.y = 0.7
+  crate.castShadow = true
+  crate.receiveShadow = true
+  g.add(crate)
+
+  // fence leading away from the terrace
+  {
+    const dir = new THREE.Vector2(AX, AZ).normalize()
+    const posts = []
+    for (let i = 0; i < 4; i++) {
+      const s = 3.1 + i * 0.95
+      const wx = AX + dir.x * s
+      const wz = AZ + dir.y * s
+      const y = gy(wx, wz)
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.6, 6), fenceMat)
+      post.position.set(wx - AX, y + 0.3, wz - AZ)
+      post.castShadow = true
+      g.add(post)
+      posts.push(new THREE.Vector3(wx - AX, y, wz - AZ))
+    }
+    const up = new THREE.Vector3(0, 1, 0)
+    for (let i = 0; i < posts.length - 1; i++) {
+      for (const hh of [0.22, 0.44]) {
+        const a = posts[i]
+        const b = posts[i + 1]
+        const len = a.distanceTo(b) + 0.06
+        const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, len, 5), fenceMat)
+        const mid = a.clone().add(b).multiplyScalar(0.5)
+        rail.position.set(mid.x, mid.y + hh, mid.z)
+        rail.quaternion.setFromUnitVectors(up, b.clone().sub(a).normalize())
+        g.add(rail)
+      }
+    }
+  }
+
+  // rocks hugging the terrace
+  {
+    const rockGeo = new THREE.DodecahedronGeometry(0.5, 0)
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0x8a8074, roughness: 0.9, flatShading: true })
+    for (let i = 0; i < 7; i++) {
+      const a = i * 0.9 + 0.4
+      const s = 2.6 + (i % 3) * 0.15
+      const wx = AX + Math.cos(a) * s
+      const wz = AZ + Math.sin(a) * s
+      const r = new THREE.Mesh(rockGeo, rockMat)
+      r.position.set(wx - AX, gy(wx, wz) + 0.08, wz - AZ)
+      r.rotation.set(Math.random(), Math.random() * Math.PI, Math.random())
+      r.scale.set(0.5 + Math.random() * 0.5, 0.35 + Math.random() * 0.3, 0.5 + Math.random() * 0.5)
+      r.castShadow = true
+      r.receiveShadow = true
+      g.add(r)
+    }
+  }
+
+  return { group: g, beamGroup, lampLight }
+}
+
 // ---------- animals ----------
 
 const smooth01 = (x) => {
@@ -534,7 +1144,7 @@ export function useOceanScene(containerRef) {
       const rocks = new THREE.InstancedMesh(rockGeo, rockMat, 5)
       const dummy = new THREE.Object3D()
       for (let i = 0; i < 5; i++) {
-        const a = i * 1.9 + 0.5
+        const a = i * 1.9 + 2.0
         const d = 2.5 + (i % 3) * 1.5
         const s = 0.4 + Math.random() * 0.5
         dummy.position.set(Math.cos(a) * d, islandTopY(d) + s * 0.2, Math.sin(a) * d)
@@ -548,56 +1158,12 @@ export function useOceanScene(containerRef) {
       scene.add(rocks)
     }
 
-    // ---- lighthouse ----
+    // ---- lighthouse (detailed, weathered) ----
     {
-      const g = new THREE.Group()
-      const white = new THREE.MeshStandardMaterial({ color: 0xf0ece0, roughness: 0.6 })
-      const red = new THREE.MeshStandardMaterial({ color: 0xb03a2e, roughness: 0.55 })
-      const dark = new THREE.MeshStandardMaterial({ color: 0x3a4048, roughness: 0.6, metalness: 0.3 })
-      const base = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.45, 0.6, 10), dark)
-      base.position.y = 0.3
-      g.add(base)
-      const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.88, 3.4, 12), white)
-      tower.position.y = 2.3
-      g.add(tower)
-      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.72, 0.55, 12), red)
-      band.position.y = 1.7
-      g.add(band)
-      const gallery = new THREE.Mesh(new THREE.CylinderGeometry(0.78, 0.66, 0.18, 12), dark)
-      gallery.position.y = 4.15
-      g.add(gallery)
-      const lantern = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.42, 0.42, 0.46, 10),
-        new THREE.MeshStandardMaterial({ color: 0xfff2d0, emissive: 0xffc86a, emissiveIntensity: 1.8 })
-      )
-      lantern.position.y = 4.45
-      g.add(lantern)
-      const roof = new THREE.Mesh(new THREE.ConeGeometry(0.6, 0.5, 10), red)
-      roof.position.y = 4.95
-      g.add(roof)
-      for (const m of [base, tower, band, gallery, roof]) {
-        m.castShadow = true
-      }
-      beamGroup = new THREE.Group()
-      beamGroup.position.y = 4.45
-      const beamMat = new THREE.MeshBasicMaterial({
-        color: 0xffe8b0, transparent: true, opacity: 0.13,
-        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
-      })
-      const beamGeo = new THREE.CylinderGeometry(1.9, 0.04, 15, 10, 1, true)
-      const beam1 = new THREE.Mesh(beamGeo, beamMat)
-      beam1.rotation.x = Math.PI / 2
-      beam1.position.z = 7.5
-      beamGroup.add(beam1)
-      const beam2 = new THREE.Mesh(beamGeo, beamMat)
-      beam2.rotation.x = -Math.PI / 2
-      beam2.position.z = -7.5
-      beamGroup.add(beam2)
-      lampLight = new THREE.PointLight(0xffd9a0, 120, 70, 2)
-      lampLight.position.y = 4.45
-      g.add(lampLight)
-      g.position.set(2, islandTopY(2.83), -2)
-      scene.add(g)
+      const lh = makeLighthouse(texAssets)
+      beamGroup = lh.beamGroup
+      lampLight = lh.lampLight
+      scene.add(lh.group)
     }
 
     // ---- kelp (GPU wind, from forest pattern) ----
@@ -900,10 +1466,13 @@ export function useOceanScene(containerRef) {
         const diveT = (Math.sin(t * 0.28 + 5.5) + 1) / 2
         const rising = diveT < turtle.diveT
         turtle.diveT = diveT
-        const radius = 24 - diveT * 12
-        const ty = -2.0 - diveT * 3.2 + Math.sin(t * 0.4) * 0.25
+        const radius = 16.5 + (1 - diveT) * 6.5
         const ta = t * 0.08
-        turtle.group.position.set(Math.cos(ta) * radius, ty, Math.sin(ta) * radius)
+        const tx = Math.cos(ta) * radius
+        const tz = Math.sin(ta) * radius
+        let ty = -1.7 - diveT * 2.3 + Math.sin(t * 0.4) * 0.25
+        ty = Math.max(ty, floorHeight(tx, tz) + 1.1)
+        turtle.group.position.set(tx, ty, tz)
         _n.set(-Math.sin(ta), 0, Math.cos(ta))
         _q.setFromUnitVectors(Z_AXIS, _n)
         turtle.group.quaternion.copy(_q)
