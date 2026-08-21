@@ -55,12 +55,449 @@ class SimpleNoise {
   }
 }
 
+// ---------- canvas textures ----------
+
+function makeTileTexture(size, draw, repeat = 1) {
+  const c = document.createElement('canvas')
+  c.width = c.height = size
+  const ctx = c.getContext('2d')
+  draw(ctx, size)
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 8
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+  tex.repeat.set(repeat, repeat)
+  return tex
+}
+
+// seamless radial-blob painter (drawn with wrap offsets so tiles match)
+function tileBlobs(ctx, size, n, rMin, rMax, colors) {
+  for (let i = 0; i < n; i++) {
+    const x = Math.random() * size
+    const y = Math.random() * size
+    const r = rMin + Math.random() * (rMax - rMin)
+    const col = colors[i % colors.length]
+    for (const ox of [-size, 0, size]) {
+      for (const oy of [-size, 0, size]) {
+        const g = ctx.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r)
+        g.addColorStop(0, col)
+        g.addColorStop(1, 'rgba(0,0,0,0)')
+        ctx.fillStyle = g
+        ctx.fillRect(x + ox - r, y + oy - r, r * 2, r * 2)
+      }
+    }
+  }
+}
+
+function tileSpeckle(ctx, size, n, colors, sMin = 1, sMax = 2.5) {
+  for (let i = 0; i < n; i++) {
+    const x = Math.random() * size
+    const y = Math.random() * size
+    const s = sMin + Math.random() * (sMax - sMin)
+    ctx.fillStyle = colors[i % colors.length]
+    for (const ox of [-size, 0, size]) {
+      for (const oy of [-size, 0, size]) {
+        ctx.fillRect(x + ox, y + oy, s, s)
+      }
+    }
+  }
+}
+
+function tileGrassBlades(ctx, size, n, colors, hMin = 3, hMax = 7) {
+  for (let i = 0; i < n; i++) {
+    const x = Math.random() * size
+    const y = Math.random() * size
+    const h = hMin + Math.random() * (hMax - hMin)
+    const lean = (Math.random() - 0.5) * 4
+    ctx.strokeStyle = colors[i % colors.length]
+    ctx.lineWidth = 1
+    for (const ox of [-size, 0, size]) {
+      for (const oy of [-size, 0, size]) {
+        ctx.beginPath()
+        ctx.moveTo(x + ox, y + oy)
+        ctx.quadraticCurveTo(x + ox + lean * 0.4, y + oy - h * 0.6, x + ox + lean, y + oy - h)
+        ctx.stroke()
+      }
+    }
+  }
+}
+
+// pale ground speckle — multiplied over vertex colors, so it adds grain without tinting
+function makeGroundTexture(repeat) {
+  return makeTileTexture(512, (ctx, size) => {
+    ctx.fillStyle = '#e8ece2'
+    ctx.fillRect(0, 0, size, size)
+    tileBlobs(ctx, size, 240, 6, 22, [
+      'rgba(214,224,196,0.55)', 'rgba(226,216,186,0.45)',
+      'rgba(196,212,178,0.5)', 'rgba(232,238,226,0.5)'
+    ])
+    tileGrassBlades(ctx, size, 900, [
+      'rgba(120,140,100,0.16)', 'rgba(150,165,120,0.18)', 'rgba(255,255,240,0.2)'
+    ])
+    tileSpeckle(ctx, size, 2200, ['rgba(90,110,80,0.14)', 'rgba(255,255,235,0.16)'])
+  }, repeat)
+}
+
+// vertical bark (seamless horizontally via x wrap)
+function makeBarkTexture() {
+  return makeTileTexture(512, (ctx, size) => {
+    ctx.fillStyle = '#6a4f36'
+    ctx.fillRect(0, 0, size, size)
+    for (let i = 0; i < 110; i++) {
+      const x = Math.random() * size
+      const w = 2 + Math.random() * 8
+      const d = 30 + Math.random() * 45
+      ctx.strokeStyle = `rgba(${d + 42},${d + 20},${Math.round(d * 0.62)},${0.3 + Math.random() * 0.35})`
+      ctx.lineWidth = w
+      for (const ox of [-size, 0, size]) {
+        ctx.beginPath()
+        let xx = x + ox
+        let yy = -12
+        ctx.moveTo(xx, yy)
+        while (yy < size + 12) {
+          yy += 28 + Math.random() * 46
+          xx = x + ox + (Math.random() - 0.5) * 12
+          ctx.lineTo(xx, yy)
+        }
+        ctx.stroke()
+      }
+    }
+    // pale lichen dashes
+    for (let i = 0; i < 160; i++) {
+      const x = Math.random() * size
+      const y = Math.random() * size
+      ctx.fillStyle = 'rgba(190,178,150,0.28)'
+      for (const ox of [-size, 0, size]) ctx.fillRect(x + ox, y, 2 + Math.random() * 5, 1.5)
+    }
+  }, 1)
+}
+
+// pine needle streaks along u (branch length)
+function makeNeedleTexture() {
+  return makeTileTexture(256, (ctx, size) => {
+    ctx.fillStyle = '#2c5422'
+    ctx.fillRect(0, 0, size, size)
+    for (let i = 0; i < 340; i++) {
+      const y = Math.random() * size
+      const len = 10 + Math.random() * 30
+      const x = Math.random() * size
+      const g = Math.round(70 + Math.random() * 60)
+      ctx.strokeStyle = `rgba(${g * 0.55},${g},${g * 0.4},0.35)`
+      ctx.lineWidth = 1 + Math.random() * 1.5
+      for (const ox of [-size, 0, size]) {
+        ctx.beginPath()
+        ctx.moveTo(x + ox, y)
+        ctx.lineTo(x + ox + len, y + (Math.random() - 0.5) * 3)
+        ctx.stroke()
+      }
+    }
+    tileBlobs(ctx, size, 60, 8, 26, ['rgba(48,92,40,0.5)', 'rgba(74,122,58,0.35)'])
+  }, 1)
+}
+
+// leafy mottle for deciduous canopies
+function makeFoliageTexture() {
+  return makeTileTexture(256, (ctx, size) => {
+    ctx.fillStyle = '#4f8a2e'
+    ctx.fillRect(0, 0, size, size)
+    tileBlobs(ctx, size, 130, 5, 18, [
+      'rgba(96,160,60,0.5)', 'rgba(60,120,40,0.45)',
+      'rgba(140,190,80,0.4)', 'rgba(40,95,32,0.4)'
+    ])
+    tileSpeckle(ctx, size, 1400, ['rgba(30,70,25,0.25)', 'rgba(190,220,120,0.25)'], 1, 2)
+  }, 1)
+}
+
+// horizontal planks with grain + gaps
+function makePlankTexture() {
+  return makeTileTexture(512, (ctx, size) => {
+    const rows = 4
+    const rh = size / rows
+    for (let r = 0; r < rows; r++) {
+      const base = 96 + Math.random() * 30
+      ctx.fillStyle = `rgb(${base + 42},${base + 14},${base * 0.62})`
+      ctx.fillRect(0, r * rh, size, rh)
+      for (let i = 0; i < 60; i++) {
+        const y = r * rh + Math.random() * rh
+        const d = base * (0.55 + Math.random() * 0.4)
+        ctx.strokeStyle = `rgba(${d},${d * 0.75},${d * 0.5},0.5)`
+        ctx.lineWidth = 0.8 + Math.random() * 1.4
+        ctx.beginPath()
+        ctx.moveTo(0, y)
+        ctx.bezierCurveTo(size * 0.3, y + (Math.random() - 0.5) * 6, size * 0.7, y + (Math.random() - 0.5) * 6, size, y)
+        ctx.stroke()
+      }
+      // gap + nails
+      ctx.fillStyle = 'rgba(30,22,14,0.75)'
+      ctx.fillRect(0, r * rh, size, 2)
+      ctx.fillStyle = 'rgba(50,40,28,0.9)'
+      for (const nx of [size * 0.12, size * 0.5, size * 0.88]) ctx.fillRect(nx, r * rh + rh / 2 - 1.5, 3, 3)
+    }
+  }, 1)
+}
+
+// stone mottle with cracks
+function makeStoneTexture() {
+  return makeTileTexture(256, (ctx, size) => {
+    ctx.fillStyle = '#7d7d7d'
+    ctx.fillRect(0, 0, size, size)
+    tileBlobs(ctx, size, 90, 6, 24, [
+      'rgba(120,120,124,0.55)', 'rgba(90,92,96,0.5)',
+      'rgba(140,138,134,0.45)', 'rgba(70,74,80,0.4)'
+    ])
+    ctx.strokeStyle = 'rgba(52,52,56,0.5)'
+    for (let i = 0; i < 26; i++) {
+      let x = Math.random() * size
+      let y = Math.random() * size
+      ctx.lineWidth = 0.7 + Math.random() * 1.2
+      ctx.beginPath()
+      ctx.moveTo(x, y)
+      for (let s = 0; s < 5; s++) {
+        x += (Math.random() - 0.5) * 40
+        y += (Math.random() - 0.5) * 40
+        ctx.lineTo(x, y)
+      }
+      ctx.stroke()
+    }
+    tileSpeckle(ctx, size, 900, ['rgba(40,40,44,0.2)', 'rgba(190,190,192,0.2)'], 1, 2)
+  }, 1)
+}
+
+// fly-agaric cap: pale base, soft-shadowed white spots (tinted per instance)
+function makeAmanitaTexture() {
+  return makeTileTexture(256, (ctx, size) => {
+    ctx.fillStyle = '#f2e8dc'
+    ctx.fillRect(0, 0, size, size)
+    for (let i = 0; i < 14; i++) {
+      const x = Math.random() * size
+      const y = Math.random() * size
+      const r = 8 + Math.random() * 14
+      const g = ctx.createRadialGradient(x, y, r * 0.6, x, y, r * 1.5)
+      g.addColorStop(0, 'rgba(255,255,255,0.95)')
+      g.addColorStop(0.7, 'rgba(255,255,255,0.85)')
+      g.addColorStop(1, 'rgba(120,90,80,0.28)')
+      ctx.fillStyle = g
+      for (const ox of [-size, 0, size]) {
+        for (const oy of [-size, 0, size]) {
+          ctx.beginPath()
+          ctx.arc(x + ox, y + oy, r * 1.5, 0, Math.PI * 2)
+          ctx.fill()
+        }
+      }
+    }
+  }, 1)
+}
+
+// fawn fur: warm base with darker spots
+function makeFawnTexture() {
+  return makeTileTexture(256, (ctx, size) => {
+    ctx.fillStyle = '#c99a68'
+    ctx.fillRect(0, 0, size, size)
+    tileBlobs(ctx, size, 70, 4, 10, ['rgba(160,116,72,0.4)'])
+    for (let i = 0; i < 46; i++) {
+      const x = Math.random() * size
+      const y = Math.random() * size
+      const r = 3 + Math.random() * 5
+      ctx.fillStyle = `rgba(122,84,48,${0.5 + Math.random() * 0.3})`
+      for (const ox of [-size, 0, size]) {
+        for (const oy of [-size, 0, size]) {
+          ctx.beginPath()
+          ctx.ellipse(x + ox, y + oy, r, r * (0.7 + Math.random() * 0.5), Math.random() * 3, 0, Math.PI * 2)
+          ctx.fill()
+        }
+      }
+    }
+  }, 1)
+}
+
+// log end rings
+function makeRingsTexture() {
+  return makeTileTexture(128, (ctx, size) => {
+    ctx.fillStyle = '#c9a875'
+    ctx.fillRect(0, 0, size, size)
+    for (let r = 6; r < size * 0.72; r += 4 + Math.random() * 5) {
+      ctx.strokeStyle = `rgba(150,112,66,${0.35 + Math.random() * 0.3})`
+      ctx.lineWidth = 1 + Math.random() * 1.5
+      ctx.beginPath()
+      ctx.arc(size / 2, size / 2, r, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+  }, 1)
+}
+
+// ---------- loft (swept elliptical cross-sections, built along +X) ----------
+
+function makeLoft(sections, seg = 10) {
+  const n = sections.length
+  const positions = []
+  const uvs = []
+  const index = []
+  const minX = sections[0].x
+  const maxX = sections[n - 1].x
+  const span = Math.max(maxX - minX, 0.0001)
+  for (let si = 0; si < n; si++) {
+    const s = sections[si]
+    for (let k = 0; k < seg; k++) {
+      const a = (k / seg) * Math.PI * 2
+      positions.push(s.x, s.cy + s.ry * Math.sin(a), s.rz * Math.cos(a))
+      uvs.push((s.x - minX) / span, k / seg)
+    }
+  }
+  for (let si = 0; si < n - 1; si++) {
+    for (let k = 0; k < seg; k++) {
+      const a = si * seg + k
+      const b = si * seg + (k + 1) % seg
+      const d = (si + 1) * seg + k
+      const c = (si + 1) * seg + (k + 1) % seg
+      index.push(a, d, c, a, c, b)
+    }
+  }
+  const addCap = (si, dir) => {
+    const s = sections[si]
+    const base = positions.length / 3
+    positions.push(s.x, s.cy, 0)
+    uvs.push(dir > 0 ? 1 : 0, 0.5)
+    const ring = si * seg
+    for (let k = 0; k < seg; k++) {
+      const v0 = ring + k
+      const v1 = ring + (k + 1) % seg
+      if (dir > 0) index.push(base, v1, v0)
+      else index.push(base, v0, v1)
+    }
+  }
+  addCap(0, -1)
+  addCap(n - 1, 1)
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2))
+  geo.setIndex(index)
+  geo.computeVertexNormals()
+  return geo
+}
+
+// Merged "real-branch pine" (summer, no snow): lofted tapered trunk + whorls of
+// lofted drooping branches. Returns two merged geometries (wood / needles).
+function buildPineGeos(rand) {
+  const wood = []
+  const needles = []
+  const X = new THREE.Vector3(1, 0, 0)
+
+  const trunk = makeLoft([
+    { x: 0, cy: 0, ry: 0.17, rz: 0.17 },
+    { x: 0.9, cy: 0, ry: 0.125, rz: 0.125 },
+    { x: 1.9, cy: 0, ry: 0.095, rz: 0.095 },
+    { x: 2.8, cy: 0, ry: 0.07, rz: 0.07 },
+    { x: 3.5, cy: 0.02, ry: 0.05, rz: 0.05 }
+  ], 6)
+  trunk.rotateZ(-Math.PI / 2)
+  wood.push(trunk)
+
+  const loftTo = (sections, q, px, py, pz) => {
+    const g = makeLoft(sections, 5)
+    g.applyQuaternion(q)
+    g.translate(px, py, pz)
+    return g
+  }
+
+  const addBranch = (y, a, len, droop, baseR) => {
+    const d = new THREE.Vector3(Math.cos(a), -droop, Math.sin(a)).normalize()
+    const q = new THREE.Quaternion().setFromUnitVectors(X, d)
+    const px = Math.cos(a) * 0.13
+    const pz = Math.sin(a) * 0.13
+    const sec = [
+      { x: 0, cy: 0, ry: baseR, rz: baseR },
+      { x: len * 0.4, cy: 0, ry: baseR * 0.7, rz: baseR * 0.7 },
+      { x: len * 0.75, cy: -0.015, ry: baseR * 0.4, rz: baseR * 0.4 },
+      { x: len, cy: -0.04, ry: baseR * 0.12, rz: baseR * 0.12 }
+    ]
+    needles.push(loftTo(sec, q, px, y, pz))
+  }
+
+  const whorls = [
+    { y: 1.15, count: 6, len: 1.25, droop: 0.42, r: 0.075 },
+    { y: 1.62, count: 6, len: 1.05, droop: 0.4, r: 0.068 },
+    { y: 2.08, count: 6, len: 0.85, droop: 0.38, r: 0.06 },
+    { y: 2.5, count: 5, len: 0.65, droop: 0.36, r: 0.05 },
+    { y: 2.88, count: 4, len: 0.45, droop: 0.34, r: 0.04 }
+  ]
+  for (const w of whorls) {
+    const yaw = rand() * Math.PI * 2
+    for (let b = 0; b < w.count; b++) {
+      const a = yaw + (b / w.count) * Math.PI * 2 + rand() * 0.5
+      addBranch(w.y, a, w.len * (0.85 + rand() * 0.3), w.droop * (0.8 + rand() * 0.4), w.r)
+    }
+  }
+
+  const tip = makeLoft([
+    { x: 0, cy: 0, ry: 0.09, rz: 0.09 },
+    { x: 0.5, cy: 0, ry: 0.05, rz: 0.05 },
+    { x: 0.85, cy: 0, ry: 0.015, rz: 0.015 }
+  ], 5)
+  tip.rotateZ(-Math.PI / 2)
+  tip.translate(0, 3.1, 0)
+  needles.push(tip)
+
+  return {
+    wood: BufferGeometryUtils.mergeGeometries(wood, false),
+    needles: BufferGeometryUtils.mergeGeometries(needles, false)
+  }
+}
+
+// Deciduous: lofted slightly-curved trunk with lofted branches reaching into the
+// canopy. Returns one merged wood geometry (trunk + branches).
+function buildDeciduousWood(rand) {
+  const parts = []
+  const X = new THREE.Vector3(1, 0, 0)
+
+  const trunk = makeLoft([
+    { x: 0, cy: 0, ry: 0.34, rz: 0.34 },
+    { x: 0.8, cy: 0.05, ry: 0.24, rz: 0.24 },
+    { x: 1.8, cy: 0.12, ry: 0.16, rz: 0.16 },
+    { x: 2.8, cy: 0.18, ry: 0.1, rz: 0.1 },
+    { x: 3.4, cy: 0.22, ry: 0.06, rz: 0.06 }
+  ], 6)
+  trunk.rotateZ(-Math.PI / 2)
+  parts.push(trunk)
+
+  const branchSpecs = [
+    { y: 2.2, len: 1.5, up: 0.55, r: 0.09 },
+    { y: 2.6, len: 1.7, up: 0.7, r: 0.08 },
+    { y: 3.0, len: 1.3, up: 0.8, r: 0.06 },
+    { y: 3.3, len: 0.9, up: 0.9, r: 0.045 }
+  ]
+  const yaw0 = rand() * Math.PI * 2
+  branchSpecs.forEach((bs, bi) => {
+    const per = 3
+    for (let b = 0; b < per; b++) {
+      const a = yaw0 + (bi * per + b) * 2.1 + rand() * 0.6
+      const d = new THREE.Vector3(Math.cos(a), bs.up, Math.sin(a)).normalize()
+      const q = new THREE.Quaternion().setFromUnitVectors(X, d)
+      const sec = [
+        { x: 0, cy: 0, ry: bs.r, rz: bs.r },
+        { x: bs.len * 0.5, cy: 0, ry: bs.r * 0.65, rz: bs.r * 0.65 },
+        { x: bs.len, cy: 0, ry: bs.r * 0.25, rz: bs.r * 0.25 }
+      ]
+      const g = makeLoft(sec, 5)
+      g.applyQuaternion(q)
+      g.translate(Math.cos(a) * 0.1, bs.y, Math.sin(a) * 0.1)
+      parts.push(g)
+    }
+  })
+
+  return BufferGeometryUtils.mergeGeometries(parts, false)
+}
+
+function makeSeededRand(seed) {
+  let s = seed % 2147483647
+  if (s <= 0) s += 2147483646
+  return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646 }
+}
+
 export function useScene(containerRef) {
   let scene, camera, renderer, controls, animationId, stopCameraMove
+  const texAssets = []
   let cloudGroups = []
-  let treeTrunkMesh, treeTopMesh, treeTop2Mesh
-  let treeTopOrigMatrices = []
-  let treeTop2OrigMatrices = []
+  const pineOrig = []
   let treePhases = []
   let deciduous = null
   let lakeMaterial
@@ -161,6 +598,7 @@ export function useScene(containerRef) {
     createLogs()
     createPier()
     createBoat()
+    createReeds()
     createDeerHerd()
     createSquirrels()
     createBirds()
@@ -300,8 +738,12 @@ export function useScene(containerRef) {
     geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
     geo.computeVertexNormals()
 
+    const groundTex = makeGroundTexture(25)
+    texAssets.push(groundTex)
+
     const mat = new THREE.MeshStandardMaterial({
       vertexColors: true,
+      map: groundTex,
       roughness: 0.9,
       metalness: 0.0,
       flatShading: false,
@@ -381,38 +823,28 @@ export function useScene(containerRef) {
 
   function createTrees() {
     const count = 350
+    const perVariant = Math.ceil(count / 3)
     const dummy = new THREE.Object3D()
 
-    // Trunk geometry + material
-    const trunkGeo = new THREE.CylinderGeometry(0.15, 0.25, 2, 6)
-    const trunkMat = new THREE.MeshStandardMaterial({
-      color: 0x5c4033,
-      roughness: 0.9,
-    })
-    treeTrunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, count)
-    treeTrunkMesh.castShadow = true
-    treeTrunkMesh.receiveShadow = true
-
-    // Canopy (cone layers)
-    const topGeo = new THREE.ConeGeometry(1.8, 4, 7)
-    const topMat = new THREE.MeshStandardMaterial({
-      color: 0x2d5a1e,
+    const barkTex = makeBarkTexture()
+    const needleTex = makeNeedleTexture()
+    texAssets.push(barkTex, needleTex)
+    const woodMat = new THREE.MeshStandardMaterial({ map: barkTex, roughness: 0.9 })
+    const needleMat = new THREE.MeshStandardMaterial({
+      map: needleTex,
+      color: 0xffffff,
       roughness: 0.8,
       flatShading: true,
     })
-    treeTopMesh = new THREE.InstancedMesh(topGeo, topMat, count)
-    treeTopMesh.castShadow = true
-    treeTopMesh.receiveShadow = true
 
-    // Second canopy layer
-    const top2Geo = new THREE.ConeGeometry(1.3, 3, 7)
-    const top2Mat = new THREE.MeshStandardMaterial({
-      color: 0x3a7a28,
-      roughness: 0.8,
-      flatShading: true,
+    const meshes = [0, 1, 2].map(v => {
+      const vg = buildPineGeos(makeSeededRand(4000 + v * 991))
+      return {
+        vUsed: 0,
+        wood: new THREE.InstancedMesh(vg.wood, woodMat, perVariant),
+        needles: new THREE.InstancedMesh(vg.needles, needleMat, perVariant)
+      }
     })
-    treeTop2Mesh = new THREE.InstancedMesh(top2Geo, top2Mat, count)
-    treeTop2Mesh.castShadow = true
 
     let placed = 0
     let attempts = 0
@@ -426,71 +858,39 @@ export function useScene(containerRef) {
       // Only place above the waterline
       if (h < 0.3 || h > 16) continue
 
-      // Random scale and rotation
+      const m = meshes[placed % 3]
+      const k = m.vUsed++
       const scale = 0.7 + Math.random() * 0.8
-      const rotation = Math.random() * Math.PI * 2
 
-      // Trunk
-      dummy.position.set(x, h + scale, z)
-      dummy.rotation.set(0, rotation, 0)
-      dummy.scale.set(scale, scale, scale)
+      dummy.position.set(x, h + 0.02, z)
+      dummy.rotation.set(0, Math.random() * Math.PI * 2, 0)
+      dummy.scale.setScalar(scale)
       dummy.updateMatrix()
-      treeTrunkMesh.setMatrixAt(placed, dummy.matrix)
+      m.wood.setMatrixAt(k, dummy.matrix)
+      m.needles.setMatrixAt(k, dummy.matrix)
 
-      // Top layer 1
-      dummy.position.set(x, h + scale * 3.5, z)
-      dummy.updateMatrix()
-      treeTopMesh.setMatrixAt(placed, dummy.matrix)
-
-      // Top layer 2
-      dummy.position.set(x, h + scale * 4.8, z)
-      dummy.scale.set(scale * 0.8, scale * 0.7, scale * 0.8)
-      dummy.rotation.y = rotation + Math.PI / 4
-      dummy.updateMatrix()
-      treeTop2Mesh.setMatrixAt(placed, dummy.matrix)
-
-      // Color variation
       const greenVar = 0.7 + Math.random() * 0.6
-      const trunkColor = new THREE.Color(0x5c4033).multiplyScalar(0.8 + Math.random() * 0.4)
-      const topColor = new THREE.Color(0x2d5a1e).multiplyScalar(greenVar)
-      const top2Color = new THREE.Color(0x3a7a28).multiplyScalar(greenVar)
-
-      treeTrunkMesh.setColorAt(placed, trunkColor)
-      treeTopMesh.setColorAt(placed, topColor)
-      treeTop2Mesh.setColorAt(placed, top2Color)
+      m.wood.setColorAt(k, new THREE.Color(0xffffff).multiplyScalar(0.75 + Math.random() * 0.4))
+      m.needles.setColorAt(k, new THREE.Color(0xbfd8a8).multiplyScalar(greenVar))
 
       treeSpots.push({ x, z, h })
-      treePhases.push(Math.random() * Math.PI * 2)
+      const phase = Math.random() * Math.PI * 2
+      treePhases.push(phase)
+      pineOrig.push({ mesh: m.needles, k, phase, m4: dummy.matrix.clone() })
 
       placed++
     }
 
-    treeTrunkMesh.count = placed
-    treeTrunkMesh.instanceMatrix.needsUpdate = true
-    if (treeTrunkMesh.instanceColor) treeTrunkMesh.instanceColor.needsUpdate = true
-
-    treeTopMesh.count = placed
-    treeTopMesh.instanceMatrix.needsUpdate = true
-    if (treeTopMesh.instanceColor) treeTopMesh.instanceColor.needsUpdate = true
-
-    treeTop2Mesh.count = placed
-    treeTop2Mesh.instanceMatrix.needsUpdate = true
-    if (treeTop2Mesh.instanceColor) treeTop2Mesh.instanceColor.needsUpdate = true
-
-    // Save original matrices for wind animation
-    const tmpMatrix = new THREE.Matrix4()
-    treeTopOrigMatrices = []
-    treeTop2OrigMatrices = []
-    for (let i = 0; i < placed; i++) {
-      treeTopMesh.getMatrixAt(i, tmpMatrix)
-      treeTopOrigMatrices.push(tmpMatrix.clone())
-      treeTop2Mesh.getMatrixAt(i, tmpMatrix)
-      treeTop2OrigMatrices.push(tmpMatrix.clone())
+    for (const m of meshes) {
+      for (const im of [m.wood, m.needles]) {
+        im.count = m.vUsed
+        im.instanceMatrix.needsUpdate = true
+        im.castShadow = true
+        im.receiveShadow = true
+        if (im.instanceColor) im.instanceColor.needsUpdate = true
+        scene.add(im)
+      }
     }
-
-    scene.add(treeTrunkMesh)
-    scene.add(treeTopMesh)
-    scene.add(treeTop2Mesh)
   }
 
   function createDeciduousTrees() {
@@ -512,20 +912,30 @@ export function useScene(containerRef) {
       return geo
     }
 
+    const barkTex = makeBarkTexture()
+    const foliageTex = makeFoliageTexture()
+    texAssets.push(barkTex, foliageTex)
+    const trunkMat = new THREE.MeshStandardMaterial({ map: barkTex, color: 0xcbb49b, roughness: 0.9 })
+    const trunkGeo = buildDeciduousWood(makeSeededRand(71))
+
+    // canopy blobs keep the lumpy look, now textured + flatter
     const blobLayers = [
-      { geo: makeBlobGeo(2.4, 8, 3), color: 0x4a8c2a, yOff: 4.1, scale: 1.0 },
-      { geo: makeBlobGeo(1.7, 7, 11), color: 0x57a036, yOff: 5.5, scale: 0.9 },
-      { geo: makeBlobGeo(1.2, 6, 23), color: 0x6ab04a, yOff: 6.4, scale: 0.8 },
+      { geo: makeBlobGeo(2.4, 9, 3), color: 0x4a8c2a, yOff: 4.1, scale: 1.0 },
+      { geo: makeBlobGeo(1.7, 8, 11), color: 0x57a036, yOff: 5.5, scale: 0.9 },
+      { geo: makeBlobGeo(1.2, 7, 23), color: 0x6ab04a, yOff: 6.4, scale: 0.8 },
     ]
 
-    const trunkGeo = new THREE.CylinderGeometry(0.18, 0.4, 3.4, 7)
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x7a5c44, roughness: 0.9 })
     const trunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, count)
     trunkMesh.castShadow = true
     trunkMesh.receiveShadow = true
 
     const blobMeshes = blobLayers.map(layer => {
-      const mat = new THREE.MeshStandardMaterial({ color: layer.color, roughness: 0.85, flatShading: true })
+      const mat = new THREE.MeshStandardMaterial({
+        map: foliageTex,
+        color: layer.color,
+        roughness: 0.85,
+        flatShading: true,
+      })
       const mesh = new THREE.InstancedMesh(layer.geo, mat, count)
       mesh.castShadow = true
       return mesh
@@ -549,18 +959,18 @@ export function useScene(containerRef) {
       dummy.rotation.set(0, rotation, 0)
       dummy.scale.set(scale, scale, scale)
 
-      dummy.position.set(x, h + scale * 1.7, z)
+      dummy.position.set(x, h + 0.02, z)
       dummy.updateMatrix()
       trunkMesh.setMatrixAt(placed, dummy.matrix)
 
-      const trunkColor = new THREE.Color(0x7a5c44).multiplyScalar(0.8 + Math.random() * 0.4)
+      const trunkColor = new THREE.Color(0xcbb49b).multiplyScalar(0.8 + Math.random() * 0.4)
       trunkMesh.setColorAt(placed, trunkColor)
 
       for (let b = 0; b < blobMeshes.length; b++) {
         const layer = blobLayers[b]
         const bs = scale * layer.scale * (0.9 + Math.random() * 0.2)
         dummy.position.set(x, h + scale * layer.yOff, z)
-        dummy.scale.set(bs, bs, bs)
+        dummy.scale.set(bs, bs * 0.92, bs)
         dummy.rotation.y = rotation + b * 0.7
         dummy.updateMatrix()
         blobMeshes[b].setMatrixAt(placed, dummy.matrix)
@@ -645,8 +1055,11 @@ export function useScene(containerRef) {
   }
 
   function createRocks() {
+    const stoneTex = makeStoneTexture()
+    texAssets.push(stoneTex)
     const rockMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
+      map: stoneTex,
       roughness: 0.95,
       metalness: 0.05,
       flatShading: true,
@@ -783,12 +1196,22 @@ export function useScene(containerRef) {
     const stemGeo = new THREE.CylinderGeometry(0.02, 0.03, 0.5, 4)
     stemGeo.translate(0, 0.25, 0)
     const stemMat = new THREE.MeshStandardMaterial({ color: 0x3f7a28, roughness: 0.9 })
-    const headGeo = new THREE.IcosahedronGeometry(0.1, 0)
-    headGeo.translate(0, 0.55, 0)
-    const headMat = new THREE.MeshStandardMaterial({ roughness: 0.7, flatShading: true })
+
+    // petal: flat ellipse on XZ, base at origin, tip drooping
+    const petalGeo = new THREE.PlaneGeometry(0.15, 0.24)
+    petalGeo.rotateX(-Math.PI / 2)
+    petalGeo.scale(0.62, 1, 1)
+    petalGeo.translate(0, 0, 0.12)
+    petalGeo.rotateX(0.45)
+    const petalMat = new THREE.MeshStandardMaterial({ roughness: 0.6, side: THREE.DoubleSide })
+
+    const centerGeo = new THREE.CylinderGeometry(0.05, 0.045, 0.06, 8)
+    centerGeo.translate(0, 0.53, 0)
+    const centerMat = new THREE.MeshStandardMaterial({ color: 0xf4d03f, roughness: 0.5 })
 
     const stems = new THREE.InstancedMesh(stemGeo, stemMat, count)
-    const heads = new THREE.InstancedMesh(headGeo, headMat, count)
+    const petals = new THREE.InstancedMesh(petalGeo, petalMat, count * 5)
+    const centers = new THREE.InstancedMesh(centerGeo, centerMat, count)
     const dummy = new THREE.Object3D()
     const palette = [0xf6e58d, 0xf1948a, 0xd2b4de, 0xffffff, 0xf9e79f]
     let placed = 0
@@ -805,23 +1228,35 @@ export function useScene(containerRef) {
       if (h < 0.35 || h > 7) continue
 
       const scale = 0.7 + Math.random() * 1.1
-      dummy.position.set(x, h, z)
-      dummy.rotation.set(0, Math.random() * Math.PI * 2, 0)
+      const yaw = Math.random() * Math.PI * 2
+      const color = new THREE.Color(palette[Math.floor(Math.random() * palette.length)])
+
+      dummy.position.set(x, h + 0.5, z)
       dummy.scale.set(scale, scale, scale)
+      for (let p = 0; p < 5; p++) {
+        dummy.rotation.set(0, yaw + (p / 5) * Math.PI * 2, 0)
+        dummy.updateMatrix()
+        petals.setMatrixAt(placed * 5 + p, dummy.matrix)
+        petals.setColorAt(placed * 5 + p, color)
+      }
+      dummy.position.set(x, h, z)
+      dummy.rotation.set(0, yaw, 0)
       dummy.updateMatrix()
       stems.setMatrixAt(placed, dummy.matrix)
-      heads.setMatrixAt(placed, dummy.matrix)
-      heads.setColorAt(placed, new THREE.Color(palette[Math.floor(Math.random() * palette.length)]))
+      centers.setMatrixAt(placed, dummy.matrix)
       placed++
     }
 
     stems.count = placed
-    heads.count = placed
+    petals.count = placed * 5
+    centers.count = placed
     stems.instanceMatrix.needsUpdate = true
-    heads.instanceMatrix.needsUpdate = true
-    if (heads.instanceColor) heads.instanceColor.needsUpdate = true
+    petals.instanceMatrix.needsUpdate = true
+    centers.instanceMatrix.needsUpdate = true
+    if (petals.instanceColor) petals.instanceColor.needsUpdate = true
     scene.add(stems)
-    scene.add(heads)
+    scene.add(petals)
+    scene.add(centers)
   }
 
   function createMushrooms() {
@@ -832,7 +1267,13 @@ export function useScene(containerRef) {
     const stemMat = new THREE.MeshStandardMaterial({ color: 0xe8dcc8, roughness: 0.85 })
     const capGeo = new THREE.SphereGeometry(0.24, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2)
     capGeo.translate(0, 0.24, 0)
-    const capMat = new THREE.MeshStandardMaterial({ roughness: 0.6, flatShading: true })
+    const amanitaTex = makeAmanitaTexture()
+    texAssets.push(amanitaTex)
+    const capMat = new THREE.MeshStandardMaterial({
+      map: amanitaTex,
+      roughness: 0.6,
+      flatShading: true,
+    })
 
     const stems = new THREE.InstancedMesh(stemGeo, stemMat, count)
     const caps = new THREE.InstancedMesh(capGeo, capMat, count)
@@ -920,8 +1361,11 @@ export function useScene(containerRef) {
   }
 
   function createLogs() {
-    const barkMat = new THREE.MeshStandardMaterial({ color: 0x6b4f3a, roughness: 0.95 })
-    const coreMat = new THREE.MeshStandardMaterial({ color: 0xc9a875, roughness: 0.85 })
+    const barkTex = makeBarkTexture()
+    const ringsTex = makeRingsTexture()
+    texAssets.push(barkTex, ringsTex)
+    const barkMat = new THREE.MeshStandardMaterial({ map: barkTex, roughness: 0.95 })
+    const coreMat = new THREE.MeshStandardMaterial({ map: ringsTex, roughness: 0.85 })
 
     for (let i = 0; i < 3; i++) {
       let x, z, h
@@ -987,8 +1431,10 @@ export function useScene(containerRef) {
     const { ca, sa, shoreD } = best
     const deckY = -0.25
 
-    const woodMat = new THREE.MeshStandardMaterial({ color: 0x8b6f47, roughness: 0.9 })
-    const darkWoodMat = new THREE.MeshStandardMaterial({ color: 0x6e5637, roughness: 0.95 })
+    const plankTex = makePlankTexture()
+    texAssets.push(plankTex)
+    const woodMat = new THREE.MeshStandardMaterial({ map: plankTex, roughness: 0.9 })
+    const darkWoodMat = new THREE.MeshStandardMaterial({ map: plankTex, color: 0xbfa88a, roughness: 0.95 })
     const pier = new THREE.Group()
 
     // Planks along local +Z (shore end -> lake center after group rotation)
@@ -1000,7 +1446,7 @@ export function useScene(containerRef) {
       pier.add(plank)
     }
 
-    // Long piles down to the lake bottom
+    // Long piles down to the lake bottom, with chipped caps
     const postLen = 13
     const postPositions = [
       [-0.8, 1.0], [0.8, 1.0],
@@ -1011,9 +1457,12 @@ export function useScene(containerRef) {
       post.position.set(px, -postLen / 2 + 0.06, pz)
       post.castShadow = true
       pier.add(post)
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.1, 6), darkWoodMat)
+      cap.position.set(px, 0.12, pz)
+      pier.add(cap)
     })
 
-    // Small bench at the shore end
+    // Small bench at the shore end, with backrest
     const bench = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.08, 0.4), darkWoodMat)
     bench.position.set(0, 0.35, 0.3)
     bench.castShadow = true
@@ -1023,6 +1472,25 @@ export function useScene(containerRef) {
     const benchLegR = benchLegL.clone()
     benchLegR.position.x = 0.4
     pier.add(benchLegL, benchLegR)
+    const backLegL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, 0.08), darkWoodMat)
+    backLegL.position.set(-0.4, 0.62, 0.14)
+    backLegL.rotation.x = 0.18
+    const backLegR = backLegL.clone()
+    backLegR.position.x = 0.4
+    const backRail = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.09, 0.09), darkWoodMat)
+    backRail.position.set(0, 0.78, 0.1)
+    backRail.rotation.x = 0.18
+    pier.add(backLegL, backLegR, backRail)
+
+    // Bollards at the lake end
+    for (const bx of [-0.55, 0.55]) {
+      const bollard = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.5, 7), darkWoodMat)
+      bollard.position.set(bx, 0.28, 6.4)
+      bollard.castShadow = true
+      const knob = new THREE.Mesh(new THREE.SphereGeometry(0.1, 7, 5), darkWoodMat)
+      knob.position.set(bx, 0.55, 6.4)
+      pier.add(bollard, knob)
+    }
 
     pier.position.set(ca * (shoreD + 0.6), deckY, sa * (shoreD + 0.6))
     pier.rotation.y = Math.atan2(-ca, -sa)
@@ -1034,20 +1502,50 @@ export function useScene(containerRef) {
   function createBoat() {
     if (!pierTip) return
     const g = new THREE.Group()
-    const hullMat = new THREE.MeshStandardMaterial({ color: 0x5d4326, roughness: 0.85 })
-    const seatMat = new THREE.MeshStandardMaterial({ color: 0x8b6f47, roughness: 0.9 })
+    const plankTex = makePlankTexture()
+    texAssets.push(plankTex)
+    const hullMat = new THREE.MeshStandardMaterial({ map: plankTex, color: 0x9c7f5e, roughness: 0.85 })
+    const seatMat = new THREE.MeshStandardMaterial({ map: plankTex, color: 0xcbb49b, roughness: 0.9 })
 
-    const hull = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.5, 2.8, 10, 1), hullMat)
-    hull.scale.set(0.6, 1, 0.8)
-    hull.rotation.z = -Math.PI / 2
-    hull.castShadow = true
+    // Hull: lofted — narrow bow/stern, full mid, rounded keel
+    const hull = new THREE.Mesh(makeLoft([
+      { x: -1.4, cy: -0.05, ry: 0.22, rz: 0.16 },
+      { x: -1.1, cy: -0.08, ry: 0.45, rz: 0.55 },
+      { x: -0.6, cy: -0.1, ry: 0.6, rz: 0.75 },
+      { x: 0.0, cy: -0.1, ry: 0.62, rz: 0.78 },
+      { x: 0.6, cy: -0.1, ry: 0.6, rz: 0.75 },
+      { x: 1.1, cy: -0.08, ry: 0.45, rz: 0.55 },
+      { x: 1.45, cy: -0.02, ry: 0.28, rz: 0.2 }
+    ], 10), hullMat)
     g.add(hull)
 
-    const seat1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.08, 0.7), seatMat)
-    seat1.position.set(0.5, 0.35, 0)
-    const seat2 = seat1.clone()
-    seat2.position.x = -0.5
-    g.add(seat1, seat2)
+    // Gunwale rim
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.05, 6, 20), seatMat)
+    rim.scale.set(2.0, 1, 1)
+    rim.rotation.y = Math.PI / 2
+    rim.position.y = 0.5
+    g.add(rim)
+
+    // Three seats
+    for (const sx of [-0.6, 0, 0.6]) {
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.07, 0.9), seatMat)
+      seat.position.set(sx, 0.42, 0)
+      g.add(seat)
+    }
+
+    // Oars resting on the rim
+    const oarMat = new THREE.MeshStandardMaterial({ map: plankTex, color: 0x8a6f52, roughness: 0.85 })
+    for (const oz of [-1, 1]) {
+      const oar = new THREE.Group()
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 1.6, 5), oarMat)
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.02, 0.34), oarMat)
+      blade.position.y = -0.75
+      oar.add(shaft, blade)
+      oar.position.set(-0.2, 0.5, oz * 0.72)
+      oar.rotation.z = 0.9
+      oar.rotation.x = oz * 0.35
+      g.add(oar)
+    }
 
     g.traverse(c => { if (c.isMesh) c.castShadow = true })
 
@@ -1070,6 +1568,73 @@ export function useScene(containerRef) {
     }
     scene.add(g)
     boat = g
+  }
+
+  function createReeds() {
+    // Find shoreline rings like the pier does, then scatter cattails along the banks
+    const spots = []
+    for (let i = 0; i < 36; i++) {
+      const a = (i / 36) * Math.PI * 2 + Math.random() * 0.1
+      const ca = Math.cos(a)
+      const sa = Math.sin(a)
+      let shoreD = null
+      for (let d = 46; d >= 10; d -= 0.5) {
+        if (getHeight(ca * d, sa * d) < -0.3) {
+          shoreD = d
+          break
+        }
+      }
+      if (shoreD === null) continue
+      spots.push({ ca, sa, shoreD })
+    }
+
+    const count = 90
+    const stemGeo = new THREE.CylinderGeometry(0.018, 0.028, 1.15, 5)
+    stemGeo.translate(0, 0.575, 0)
+    const stemMat = new THREE.MeshStandardMaterial({ color: 0x6a8f3f, roughness: 0.9 })
+    const headGeo = new THREE.CapsuleGeometry(0.05, 0.22, 3, 6)
+    headGeo.translate(0, 1.28, 0)
+    const headMat = new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 0.85 })
+
+    const stems = new THREE.InstancedMesh(stemGeo, stemMat, count)
+    const heads = new THREE.InstancedMesh(headGeo, headMat, count)
+    const dummy = new THREE.Object3D()
+    let placed = 0
+
+    for (let attempts = 0; placed < count && attempts < count * 12; attempts++) {
+      const s = spots[Math.floor(Math.random() * spots.length)]
+      if (!s) break
+      // Just inside (wet) to just outside (bank) of the waterline
+      const d = s.shoreD + (Math.random() - 0.65) * 3.5
+      const x = s.ca * d
+      const z = s.sa * d
+      const h = getHeight(x, z)
+      if (h < -0.55 || h > 0.9) continue
+
+      const scale = 0.7 + Math.random() * 0.9
+      const tilt = (Math.random() - 0.5) * 0.3
+      dummy.position.set(x, h, z)
+      dummy.rotation.set(tilt * 0.6, Math.random() * Math.PI, tilt)
+      dummy.scale.setScalar(scale)
+      dummy.updateMatrix()
+      stems.setMatrixAt(placed, dummy.matrix)
+      heads.setMatrixAt(placed, dummy.matrix)
+      const gv = 0.75 + Math.random() * 0.5
+      stems.setColorAt(placed, new THREE.Color(0x6a8f3f).multiplyScalar(gv))
+      heads.setColorAt(placed, new THREE.Color(0x6b4423).multiplyScalar(0.8 + Math.random() * 0.4))
+      placed++
+    }
+
+    stems.count = placed
+    heads.count = placed
+    stems.instanceMatrix.needsUpdate = true
+    heads.instanceMatrix.needsUpdate = true
+    if (stems.instanceColor) stems.instanceColor.needsUpdate = true
+    if (heads.instanceColor) heads.instanceColor.needsUpdate = true
+    stems.castShadow = true
+    heads.castShadow = true
+    scene.add(stems)
+    scene.add(heads)
   }
 
   function updateBoat(delta, elapsed) {
@@ -1129,73 +1694,64 @@ export function useScene(containerRef) {
     const deerGroup = new THREE.Group()
     const deerLegs = []
 
-    const bodyMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x8b5e3c).multiplyScalar(colorMul), roughness: 0.8 })
+    let fawnTex = null
+    const bodyMat = fawn
+      ? (() => { fawnTex = makeFawnTexture(); texAssets.push(fawnTex); return new THREE.MeshStandardMaterial({ map: fawnTex, roughness: 0.85 }) })()
+      : new THREE.MeshStandardMaterial({ color: new THREE.Color(0x8b5e3c).multiplyScalar(colorMul), roughness: 0.8 })
     const darkMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x5c4033).multiplyScalar(colorMul), roughness: 0.9 })
-    const lightMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0xc4a48c).multiplyScalar(colorMul), roughness: 0.8 })
+    const lightMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0xe8d9c4).multiplyScalar(colorMul), roughness: 0.8 })
     const noseMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x3d2b1f).multiplyScalar(colorMul), roughness: 0.7 })
     const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.3 })
 
-    // Body (main torso)
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.2, 0.9), bodyMat)
-    body.position.y = 2.2
+    // Body: single loft — rump -> shoulder hump -> neck -> head -> snout
+    const body = new THREE.Mesh(makeLoft([
+      { x: -0.85, cy: 2.25, ry: 0.62, rz: 0.5 },
+      { x: -0.45, cy: 2.35, ry: 0.66, rz: 0.52 },
+      { x: 0.0, cy: 2.5, ry: 0.6, rz: 0.5 },
+      { x: 0.5, cy: 2.62, ry: 0.56, rz: 0.48 },
+      { x: 0.9, cy: 2.85, ry: 0.34, rz: 0.3 },
+      { x: 1.2, cy: 3.1, ry: 0.24, rz: 0.22 },
+      { x: 1.45, cy: 3.35, ry: 0.22, rz: 0.2 },
+      { x: 1.75, cy: 3.2, ry: 0.14, rz: 0.16 },
+      { x: 1.95, cy: 3.18, ry: 0.1, rz: 0.12 }
+    ], 12), bodyMat)
     deerGroup.add(body)
 
-    // Belly (lighter)
-    const belly = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.7, 0.8), lightMat)
-    belly.position.set(0, 1.9, 0.1)
-    deerGroup.add(belly)
-
-    // Neck
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 1.0, 8), bodyMat)
-    neck.position.set(0.8, 2.8, 0)
-    neck.rotation.z = -0.4
-    deerGroup.add(neck)
-
-    // Head
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.45, 0.4), bodyMat)
-    head.position.set(1.1, 3.3, 0)
-    deerGroup.add(head)
-
-    // Snout
-    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.35), lightMat)
-    snout.position.set(1.45, 3.15, 0)
-    deerGroup.add(snout)
-
-    // Nose
-    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.38), noseMat)
-    nose.position.set(1.6, 3.15, 0)
-    deerGroup.add(nose)
+    // Ears
+    const earGeo = new THREE.ConeGeometry(0.11, 0.3, 6)
+    const earL = new THREE.Mesh(earGeo, bodyMat)
+    earL.position.set(1.28, 3.62, 0.22)
+    earL.rotation.set(0.15, 0, -0.5)
+    const earR = new THREE.Mesh(earGeo, bodyMat)
+    earR.position.set(1.28, 3.62, -0.22)
+    earR.rotation.set(0.15, 0, 0.5)
+    deerGroup.add(earL, earR)
 
     // Eyes
-    const eyeGeo = new THREE.SphereGeometry(0.06, 8, 6)
+    const eyeGeo = new THREE.SphereGeometry(0.055, 8, 6)
     const eyeL = new THREE.Mesh(eyeGeo, eyeMat)
-    eyeL.position.set(1.25, 3.4, 0.22)
+    eyeL.position.set(1.42, 3.45, 0.2)
     const eyeR = new THREE.Mesh(eyeGeo, eyeMat)
-    eyeR.position.set(1.25, 3.4, -0.22)
+    eyeR.position.set(1.42, 3.45, -0.2)
     deerGroup.add(eyeL, eyeR)
 
-    // Ears
-    const earGeo = new THREE.SphereGeometry(0.15, 6, 4)
-    earGeo.scale(1, 0.5, 0.6)
-    const earL = new THREE.Mesh(earGeo, bodyMat)
-    earL.position.set(1.0, 3.55, 0.28)
-    earL.rotation.z = -0.3
-    const earR = new THREE.Mesh(earGeo, bodyMat)
-    earR.position.set(1.0, 3.55, -0.28)
-    earR.rotation.z = -0.3
-    deerGroup.add(earL, earR)
+    // Nose
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), noseMat)
+    nose.position.set(1.97, 3.18, 0)
+    nose.scale.set(0.8, 1, 1.1)
+    deerGroup.add(nose)
 
     // Antlers (adults only)
     if (antlers) {
       const antlerMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x6b5b4f).multiplyScalar(colorMul), roughness: 0.85 })
       const antlerPositions = [
-        { pos: [0.95, 3.65, 0.15], rot: [0, 0, -0.2], scale: [0.06, 0.7, 0.06] },
-        { pos: [0.95, 3.65, -0.15], rot: [0, 0, 0.2], scale: [0.06, 0.7, 0.06] },
+        { pos: [1.2, 3.75, 0.15], rot: [0, 0, -0.2], scale: [0.06, 0.7, 0.06] },
+        { pos: [1.2, 3.75, -0.15], rot: [0, 0, 0.2], scale: [0.06, 0.7, 0.06] },
         // Branches
-        { pos: [1.05, 3.85, 0.2], rot: [0.3, 0, -0.5], scale: [0.05, 0.3, 0.05] },
-        { pos: [1.05, 3.85, -0.2], rot: [0.3, 0, 0.5], scale: [0.05, 0.3, 0.05] },
-        { pos: [0.9, 3.95, 0.18], rot: [-0.2, 0, -0.3], scale: [0.04, 0.2, 0.04] },
-        { pos: [0.9, 3.95, -0.18], rot: [-0.2, 0, 0.3], scale: [0.04, 0.2, 0.04] },
+        { pos: [1.3, 3.95, 0.2], rot: [0.3, 0, -0.5], scale: [0.05, 0.3, 0.05] },
+        { pos: [1.3, 3.95, -0.2], rot: [0.3, 0, 0.5], scale: [0.05, 0.3, 0.05] },
+        { pos: [1.15, 4.05, 0.18], rot: [-0.2, 0, -0.3], scale: [0.04, 0.2, 0.04] },
+        { pos: [1.15, 4.05, -0.18], rot: [-0.2, 0, 0.3], scale: [0.04, 0.2, 0.04] },
       ]
       antlerPositions.forEach(a => {
         const antler = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.05, 1, 6), antlerMat)
@@ -1206,36 +1762,46 @@ export function useScene(containerRef) {
       })
     }
 
-    // Legs (4 legs - front2, back2)
-    const legGeo = new THREE.CylinderGeometry(0.1, 0.08, 1.65, 6)
-    const hoofGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12)
+    // Legs: lofted hip -> knee -> ankle -> foot, pivoted at the hip
+    const legGeo = makeLoft([
+      { x: 0, cy: 0, ry: 0.15, rz: 0.14 },
+      { x: 0.55, cy: 0, ry: 0.11, rz: 0.1 },
+      { x: 1.0, cy: 0, ry: 0.09, rz: 0.08 },
+      { x: 1.45, cy: 0, ry: 0.12, rz: 0.1 }
+    ], 8)
+    legGeo.rotateZ(-Math.PI / 2)
+    const hoofGeo = new THREE.BoxGeometry(0.14, 0.1, 0.16)
     const legData = [
-      { name: 'frontLeft', x: 0.6, z: 0.3 },
-      { name: 'frontRight', x: 0.6, z: -0.3 },
-      { name: 'backLeft', x: -0.6, z: 0.3 },
-      { name: 'backRight', x: -0.6, z: -0.3 },
+      { name: 'frontLeft', x: 0.55, z: 0.28 },
+      { name: 'frontRight', x: 0.55, z: -0.28 },
+      { name: 'backLeft', x: -0.6, z: 0.28 },
+      { name: 'backRight', x: -0.6, z: -0.28 },
     ]
 
     legData.forEach(ld => {
       const leg = new THREE.Group()
       const upper = new THREE.Mesh(legGeo, darkMat)
-      upper.position.y = -0.5
       leg.add(upper)
 
       const hoof = new THREE.Mesh(hoofGeo, noseMat)
-      hoof.position.y = -1.25
+      hoof.position.y = -1.4
       leg.add(hoof)
 
-      leg.position.set(ld.x, 1.31, ld.z)
+      leg.position.set(ld.x, 1.45, ld.z)
       leg.userData = { name: ld.name }
       deerGroup.add(leg)
       deerLegs.push(leg)
     })
 
-    // Tail
-    const tail = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 4), lightMat)
-    tail.position.set(-0.9, 2.5, 0)
-    tail.scale.set(0.8, 1, 0.6)
+    // White tail (lofted nub, wags around its base)
+    const tailGeo = makeLoft([
+      { x: 0, cy: 0, ry: 0.13, rz: 0.13 },
+      { x: 0.28, cy: 0.06, ry: 0.1, rz: 0.1 },
+      { x: 0.45, cy: 0.14, ry: 0.06, rz: 0.06 }
+    ], 8)
+    const tail = new THREE.Mesh(tailGeo, lightMat)
+    tail.position.set(-0.85, 2.55, 0)
+    tail.rotation.z = 0.5
     deerGroup.add(tail)
 
     deerGroup.scale.setScalar(scale)
@@ -1294,7 +1860,7 @@ export function useScene(containerRef) {
 
       if (deer.state === 'idle') {
         deer.idleTime -= delta
-        deer.body.position.y += (2.2 - deer.body.position.y) * 0.2
+        deer.body.position.y *= 0.85
         deer.legs.forEach(leg => { leg.rotation.x *= 0.9 })
         deer.tail.rotation.x *= 0.9
         if (deer.idleTime <= 0) {
@@ -1351,7 +1917,7 @@ export function useScene(containerRef) {
             })
 
             // Body bob
-            deer.body.position.y = 2.2 + Math.sin(gaitPhase * 2) * 0.05
+            deer.body.position.y = Math.sin(gaitPhase * 2) * 0.06
 
             // Tail wag
             deer.tail.rotation.x = Math.sin(elapsed * walkSpeed) * 0.3
@@ -1372,46 +1938,40 @@ export function useScene(containerRef) {
 
       const sq = new THREE.Group()
 
-      const body = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), bodyMat)
-      body.scale.set(1.4, 1, 1)
-      body.position.y = 0.45
+      // Body: single loft — rump -> arched back -> head -> snout
+      const body = new THREE.Mesh(makeLoft([
+        { x: -0.3, cy: 0.42, ry: 0.22, rz: 0.2 },
+        { x: -0.1, cy: 0.5, ry: 0.26, rz: 0.22 },
+        { x: 0.12, cy: 0.58, ry: 0.22, rz: 0.2 },
+        { x: 0.32, cy: 0.66, ry: 0.16, rz: 0.15 },
+        { x: 0.45, cy: 0.7, ry: 0.14, rz: 0.13 },
+        { x: 0.58, cy: 0.64, ry: 0.09, rz: 0.1 }
+      ], 10), bodyMat)
       sq.add(body)
 
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6), bodyMat)
-      head.position.set(0.4, 0.62, 0)
-      sq.add(head)
-
-      const snout = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 4), bodyMat)
-      snout.scale.set(0.8, 0.6, 0.7)
-      snout.position.set(0.55, 0.57, 0)
-      sq.add(snout)
-
-      const earGeo = new THREE.SphereGeometry(0.07, 6, 4)
+      const earGeo = new THREE.ConeGeometry(0.05, 0.14, 5)
       const earL = new THREE.Mesh(earGeo, darkMat)
-      earL.position.set(0.38, 0.8, 0.1)
+      earL.position.set(0.4, 0.84, 0.09)
+      earL.rotation.z = -0.25
       const earR = earL.clone()
-      earR.position.z = -0.1
+      earR.position.z = -0.09
+      earR.rotation.z = 0.25
       sq.add(earL, earR)
 
       const eyeGeo = new THREE.SphereGeometry(0.03, 6, 4)
       const eyeL = new THREE.Mesh(eyeGeo, eyeMat)
-      eyeL.position.set(0.5, 0.68, 0.12)
+      eyeL.position.set(0.47, 0.76, 0.11)
       const eyeR = new THREE.Mesh(eyeGeo, eyeMat)
-      eyeR.position.set(0.5, 0.68, -0.12)
+      eyeR.position.set(0.47, 0.76, -0.11)
       sq.add(eyeL, eyeR)
 
-      // Fluffy tail (3-segment arc)
-      const tail = new THREE.Group()
-      const tailSpecs = [
-        { r: 0.16, pos: [-0.35, 0.55, 0.05] },
-        { r: 0.13, pos: [-0.5, 0.75, 0.1] },
-        { r: 0.1, pos: [-0.5, 0.95, 0.12] },
-      ]
-      tailSpecs.forEach(s => {
-        const t = new THREE.Mesh(new THREE.SphereGeometry(s.r, 7, 5), darkMat)
-        t.position.set(...s.pos)
-        tail.add(t)
-      })
+      // Fluffy tail: one loft curving up and back over the rump
+      const tail = new THREE.Mesh(makeLoft([
+        { x: -0.35, cy: 0.5, ry: 0.16, rz: 0.14 },
+        { x: -0.5, cy: 0.66, ry: 0.18, rz: 0.16 },
+        { x: -0.54, cy: 0.86, ry: 0.15, rz: 0.13 },
+        { x: -0.46, cy: 1.02, ry: 0.1, rz: 0.09 }
+      ], 10), darkMat)
       sq.add(tail)
 
       sq.traverse(c => { if (c.isMesh) { c.castShadow = true } })
@@ -1509,22 +2069,26 @@ export function useScene(containerRef) {
 
       const bird = new THREE.Group()
 
-      const body = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), bodyMat)
-      body.scale.set(1.8, 0.8, 0.9)
+      // Body: single loft — chest -> neck -> head
+      const body = new THREE.Mesh(makeLoft([
+        { x: -0.25, cy: 0, ry: 0.11, rz: 0.09 },
+        { x: -0.05, cy: 0.01, ry: 0.14, rz: 0.12 },
+        { x: 0.15, cy: 0.04, ry: 0.1, rz: 0.09 },
+        { x: 0.3, cy: 0.05, ry: 0.085, rz: 0.08 },
+        { x: 0.42, cy: 0.04, ry: 0.05, rz: 0.05 }
+      ], 8), bodyMat)
       bird.add(body)
 
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), bodyMat)
-      head.position.set(0.3, 0.05, 0)
-      bird.add(head)
-
-      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.16, 5), beakMat)
-      beak.position.set(0.46, 0.05, 0)
+      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.14, 5), beakMat)
+      beak.position.set(0.5, 0.04, 0)
       beak.rotation.z = -Math.PI / 2
       bird.add(beak)
 
-      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.3, 4), wingMat)
-      tail.position.set(-0.38, 0.02, 0)
-      tail.rotation.z = Math.PI / 2
+      // Tail: lofted fan
+      const tail = new THREE.Mesh(makeLoft([
+        { x: -0.3, cy: 0, ry: 0.04, rz: 0.05 },
+        { x: -0.55, cy: 0.02, ry: 0.08, rz: 0.07 }
+      ], 6), wingMat)
       bird.add(tail)
 
       // Triangular wings, root at shoulder, span along +Z
@@ -1789,48 +2353,33 @@ export function useScene(containerRef) {
       grassWindShader.uniforms.uWind.value.set(wind.x, wind.z)
     }
 
-    // Gentle tree sway - tilt canopies around their base orientation
-    if (treeTopMesh && treeTop2Mesh && treeTopOrigMatrices.length) {
-      const count = treeTopOrigMatrices.length
+    // Gentle tree sway - tilt branchy canopies around their base orientation
+    if (pineOrig.length) {
       const dummy = new THREE.Object3D()
       const pos = new THREE.Vector3()
       const quat = new THREE.Quaternion()
-      const scale = new THREE.Vector3()
+      const scl = new THREE.Vector3()
       const windQuat = new THREE.Quaternion()
       const euler = new THREE.Euler()
+      const dirty = new Set()
 
-      for (let i = 0; i < count; i++) {
-        const phase = treePhases[i] || i * 0.5
-
-        treeTopOrigMatrices[i].decompose(pos, quat, scale)
+      for (let i = 0; i < pineOrig.length; i++) {
+        const e = pineOrig[i]
+        e.m4.decompose(pos, quat, scl)
         euler.set(
-          Math.sin(elapsed * 1.2 + phase) * 0.03 + wind.x * 0.035,
+          Math.sin(elapsed * 1.2 + e.phase) * 0.035 + wind.x * 0.04,
           0,
-          Math.cos(elapsed * 1.0 + phase) * 0.03 + wind.z * 0.035
+          Math.cos(elapsed * 1.0 + e.phase) * 0.035 + wind.z * 0.04
         )
         windQuat.setFromEuler(euler)
         dummy.position.copy(pos)
         dummy.quaternion.copy(quat).premultiply(windQuat)
-        dummy.scale.copy(scale)
+        dummy.scale.copy(scl)
         dummy.updateMatrix()
-        treeTopMesh.setMatrixAt(i, dummy.matrix)
-
-        treeTop2OrigMatrices[i].decompose(pos, quat, scale)
-        euler.set(
-          Math.sin(elapsed * 1.3 + phase + 1) * 0.04 + wind.x * 0.05,
-          0,
-          Math.cos(elapsed * 1.1 + phase + 1) * 0.04 + wind.z * 0.05
-        )
-        windQuat.setFromEuler(euler)
-        dummy.position.copy(pos)
-        dummy.quaternion.copy(quat).premultiply(windQuat)
-        dummy.scale.copy(scale)
-        dummy.updateMatrix()
-        treeTop2Mesh.setMatrixAt(i, dummy.matrix)
+        e.mesh.setMatrixAt(e.k, dummy.matrix)
+        dirty.add(e.mesh)
       }
-
-      treeTopMesh.instanceMatrix.needsUpdate = true
-      treeTop2Mesh.instanceMatrix.needsUpdate = true
+      for (const im of dirty) im.instanceMatrix.needsUpdate = true
     }
 
     // Deciduous foliage sway
@@ -1917,6 +2466,7 @@ export function useScene(containerRef) {
         }
       })
     }
+    for (const t of texAssets) t.dispose()
   }
 
   return { init, dispose, autoRotate, toggleAutoRotate }
