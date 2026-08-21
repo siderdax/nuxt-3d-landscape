@@ -845,13 +845,15 @@ function makeSandCanvas() {
 // ---------- jellyfish builders ----------
 
 function makeJellyBellGeometry() {
+  // profile rolls inward+up at the bottom edge -> the bell's own lip (no separate rim)
   const pts2d = [
     [0.02, 0.52], [0.22, 0.47], [0.38, 0.38], [0.49, 0.25],
-    [0.55, 0.10], [0.56, 0.0], [0.52, -0.05], [0.46, -0.07]
+    [0.55, 0.10], [0.565, 0.0], [0.53, -0.045], [0.47, -0.075],
+    [0.435, -0.05], [0.425, -0.01], [0.435, 0.03]
   ]
   const curve = new THREE.CatmullRomCurve3(pts2d.map((p) => new THREE.Vector3(p[0], p[1], 0)))
-  const pts = curve.getPoints(24).map((p) => new THREE.Vector2(Math.max(0.001, p.x), p.y))
-  const geo = new THREE.LatheGeometry(pts, 24)
+  const pts = curve.getPoints(40).map((p) => new THREE.Vector2(Math.max(0.001, p.x), p.y))
+  const geo = new THREE.LatheGeometry(pts, 28)
   geo.computeVertexNormals()
   return geo
 }
@@ -2371,9 +2373,6 @@ export function useOceanScene(containerRef) {
         const tentMat = makeJellyTentMat(hue)
         const g = new THREE.Group()
         g.add(new THREE.Mesh(bellGeo, bellMat))
-        const rim = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.03, 8, 32), bellMat)
-        rim.position.y = -0.05
-        g.add(rim)
         const core = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), coreMat)
         core.scale.set(1, 0.85, 1)
         core.position.y = 0.16

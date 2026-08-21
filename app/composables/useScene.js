@@ -1507,29 +1507,44 @@ export function useScene(containerRef) {
     const hullMat = new THREE.MeshStandardMaterial({ map: plankTex, color: 0x9c7f5e, roughness: 0.85 })
     const seatMat = new THREE.MeshStandardMaterial({ map: plankTex, color: 0xcbb49b, roughness: 0.9 })
 
-    // Hull: lofted — narrow bow/stern, full mid, rounded keel
-    const hull = new THREE.Mesh(makeLoft([
-      { x: -1.4, cy: -0.05, ry: 0.22, rz: 0.16 },
-      { x: -1.1, cy: -0.08, ry: 0.45, rz: 0.55 },
-      { x: -0.6, cy: -0.1, ry: 0.6, rz: 0.75 },
-      { x: 0.0, cy: -0.1, ry: 0.62, rz: 0.78 },
-      { x: 0.6, cy: -0.1, ry: 0.6, rz: 0.75 },
-      { x: 1.1, cy: -0.08, ry: 0.45, rz: 0.55 },
-      { x: 1.45, cy: -0.02, ry: 0.28, rz: 0.2 }
-    ], 10), hullMat)
+    hullMat.side = THREE.DoubleSide
+    // Hull: open-top bowl (lower hemisphere), narrow-ish ends from the taper
+    const hullGeo = new THREE.SphereGeometry(1, 24, 14, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5)
+    hullGeo.scale(1.5, 0.5, 0.8)
+    // taper the bow/stern so it reads as a boat, not a tub
+    {
+      const hp = hullGeo.attributes.position
+      for (let i = 0; i < hp.count; i++) {
+        const x = hp.getX(i)
+        const t = Math.min(1, Math.abs(x) / 1.5)
+        const squeeze = 1 - 0.55 * t * t
+        hp.setZ(i, hp.getZ(i) * squeeze)
+        hp.setY(i, hp.getY(i) * (1 - 0.35 * t * t))
+      }
+      hullGeo.computeVertexNormals()
+    }
+    const hull = new THREE.Mesh(hullGeo, hullMat)
     g.add(hull)
 
-    // Gunwale rim
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.05, 6, 20), seatMat)
-    rim.scale.set(2.0, 1, 1)
-    rim.rotation.y = Math.PI / 2
-    rim.position.y = 0.5
+    // Gunwale: a thin rail hugging the rim (not a puffy torus)
+    const rimPts = new THREE.EllipseCurve(0, 0, 1.44, 0.76, 0, Math.PI * 2, false, 0)
+      .getPoints(40).map((p) => new THREE.Vector3(p.x, 0.01, p.y))
+    const rim = new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rimPts, true), 48, 0.035, 6, true),
+      seatMat
+    )
     g.add(rim)
+
+    // Interior floor
+    const floor = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.05, 24), seatMat)
+    floor.scale.set(1.32, 1, 0.7)
+    floor.position.y = -0.16
+    g.add(floor)
 
     // Three seats
     for (const sx of [-0.6, 0, 0.6]) {
-      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.07, 0.9), seatMat)
-      seat.position.set(sx, 0.42, 0)
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.07, 1.0), seatMat)
+      seat.position.set(sx, -0.05, 0)
       g.add(seat)
     }
 
@@ -1541,9 +1556,9 @@ export function useScene(containerRef) {
       const blade = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.02, 0.34), oarMat)
       blade.position.y = -0.75
       oar.add(shaft, blade)
-      oar.position.set(-0.2, 0.5, oz * 0.72)
-      oar.rotation.z = 0.9
-      oar.rotation.x = oz * 0.35
+      oar.position.set(-0.15, 0.05, oz * 0.7)
+      oar.rotation.z = 0.95
+      oar.rotation.x = -oz * 0.28
       g.add(oar)
     }
 
@@ -1762,15 +1777,16 @@ export function useScene(containerRef) {
       })
     }
 
-    // Legs: lofted hip -> knee -> ankle -> foot, pivoted at the hip
+    // Legs: lofted hip -> knee -> ankle -> foot, pivoted at the hip.
+    // The hip is thick and set high so it is buried inside the body loft (no gap).
     const legGeo = makeLoft([
-      { x: 0, cy: 0, ry: 0.15, rz: 0.14 },
-      { x: 0.55, cy: 0, ry: 0.11, rz: 0.1 },
-      { x: 1.0, cy: 0, ry: 0.09, rz: 0.08 },
-      { x: 1.45, cy: 0, ry: 0.12, rz: 0.1 }
+      { x: 0, cy: 0, ry: 0.2, rz: 0.18 },
+      { x: 0.8, cy: 0, ry: 0.12, rz: 0.11 },
+      { x: 1.7, cy: 0, ry: 0.09, rz: 0.08 },
+      { x: 2.2, cy: 0, ry: 0.13, rz: 0.11 }
     ], 8)
     legGeo.rotateZ(-Math.PI / 2)
-    const hoofGeo = new THREE.BoxGeometry(0.14, 0.1, 0.16)
+    const hoofGeo = new THREE.BoxGeometry(0.15, 0.12, 0.17)
     const legData = [
       { name: 'frontLeft', x: 0.55, z: 0.28 },
       { name: 'frontRight', x: 0.55, z: -0.28 },
@@ -1784,10 +1800,10 @@ export function useScene(containerRef) {
       leg.add(upper)
 
       const hoof = new THREE.Mesh(hoofGeo, noseMat)
-      hoof.position.y = -1.4
+      hoof.position.y = -2.13
       leg.add(hoof)
 
-      leg.position.set(ld.x, 1.45, ld.z)
+      leg.position.set(ld.x, 2.2, ld.z)
       leg.userData = { name: ld.name }
       deerGroup.add(leg)
       deerLegs.push(leg)
@@ -2154,13 +2170,39 @@ export function useScene(containerRef) {
 
   function createButterflies() {
     const palette = [0xf5b041, 0xfdfefe, 0x5dade2, 0xec7063, 0xf7dc6f]
-    const wingGeo = new THREE.BufferGeometry()
-    wingGeo.setAttribute('position', new THREE.Float32BufferAttribute([
-      0.05, 0, 0,
-      -0.3, 0, 0.5,
-      0.35, 0, 0.45,
-    ], 3))
-    wingGeo.computeVertexNormals()
+
+    // Wing membranes (XY, root at origin, outward +y, body axis +x) -> laid on XZ
+    const foreShape = new THREE.Shape()
+    foreShape.moveTo(0.0, 0.0)
+    foreShape.lineTo(0.26, 0.05)
+    foreShape.quadraticCurveTo(0.34, 0.12, 0.3, 0.26)
+    foreShape.quadraticCurveTo(0.27, 0.42, 0.13, 0.46)
+    foreShape.quadraticCurveTo(0.04, 0.46, 0.02, 0.3)
+    foreShape.quadraticCurveTo(-0.01, 0.15, 0.0, 0.0)
+
+    const hindShape = new THREE.Shape()
+    hindShape.moveTo(0.0, 0.0)
+    hindShape.quadraticCurveTo(-0.08, 0.16, -0.18, 0.22)
+    hindShape.quadraticCurveTo(-0.3, 0.24, -0.29, 0.12)
+    hindShape.quadraticCurveTo(-0.27, 0.02, -0.16, -0.03)
+    hindShape.quadraticCurveTo(-0.06, -0.05, 0.0, 0.0)
+
+    const makeWingGeo = (shape, maxOut) => {
+      const geo = new THREE.ShapeGeometry(shape, 10)
+      geo.rotateX(Math.PI / 2) // outward +y -> +z
+      const pos = geo.attributes.position
+      const colors = []
+      for (let i = 0; i < pos.count; i++) {
+        let t = THREE.MathUtils.clamp(pos.getZ(i) / maxOut, 0, 1)
+        t = t * t * (3 - 2 * t)
+        const c = 1 - 0.55 * t
+        colors.push(c, c, c)
+      }
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+      return geo
+    }
+    const foreGeo = makeWingGeo(foreShape, 0.47)
+    const hindGeo = makeWingGeo(hindShape, 0.25)
 
     for (let i = 0; i < 10; i++) {
       let hx, hz, hh
@@ -2173,23 +2215,49 @@ export function useScene(containerRef) {
       } while ((Math.sqrt(hx * hx + hz * hz) > 70 || hh < 0.35 || hh > 8) && attempts < 50)
 
       const color = palette[i % palette.length]
-      const wingMat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, side: THREE.DoubleSide, emissive: new THREE.Color(color).multiplyScalar(0.15) })
+      const wingMat = new THREE.MeshStandardMaterial({
+        color, roughness: 0.6, side: THREE.DoubleSide, vertexColors: true,
+        emissive: new THREE.Color(color).multiplyScalar(0.12)
+      })
       const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.8 })
 
       const bf = new THREE.Group()
 
-      const wingL = new THREE.Mesh(wingGeo, wingMat)
-      const wingR = new THREE.Mesh(wingGeo, wingMat)
-      wingR.scale.z = -1
+      // Wings: fore + hind lobe per side, mirrored, flapped as a group
+      const wingL = new THREE.Group()
+      wingL.add(new THREE.Mesh(foreGeo, wingMat), new THREE.Mesh(hindGeo, wingMat))
+      const wingR = new THREE.Group()
+      const foreR = new THREE.Mesh(foreGeo, wingMat); foreR.scale.z = -1
+      const hindR = new THREE.Mesh(hindGeo, wingMat); hindR.scale.z = -1
+      wingR.add(foreR, hindR)
       bf.add(wingL, wingR)
 
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.02, 0.32, 5), bodyMat)
-      body.rotation.z = Math.PI / 2
+      // Body: lofted abdomen -> thorax -> head base
+      const body = new THREE.Mesh(makeLoft([
+        { x: -0.16, cy: 0, ry: 0.018, rz: 0.018 },
+        { x: -0.1, cy: 0.005, ry: 0.03, rz: 0.03 },
+        { x: -0.02, cy: 0.01, ry: 0.038, rz: 0.038 },
+        { x: 0.06, cy: 0.012, ry: 0.032, rz: 0.032 },
+        { x: 0.12, cy: 0.01, ry: 0.022, rz: 0.022 }
+      ], 8), bodyMat)
       bf.add(body)
 
-      const headDot = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 4), bodyMat)
-      headDot.position.set(0.18, 0, 0)
+      const headDot = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 6), bodyMat)
+      headDot.position.set(0.14, 0.012, 0)
       bf.add(headDot)
+
+      // Antennae: thin curved tubes with club tips
+      for (const side of [1, -1]) {
+        const curve = new THREE.CatmullRomCurve3([
+          new THREE.Vector3(0.15, 0.03, side * 0.01),
+          new THREE.Vector3(0.2, 0.09, side * 0.03),
+          new THREE.Vector3(0.24, 0.12, side * 0.05)
+        ])
+        bf.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 8, 0.004, 4), bodyMat))
+        const tip = new THREE.Mesh(new THREE.SphereGeometry(0.008, 5, 4), bodyMat)
+        tip.position.set(0.24, 0.12, side * 0.05)
+        bf.add(tip)
+      }
 
       bf.scale.setScalar(0.8 + Math.random() * 0.4)
       bf.position.set(hx, hh + 1.2, hz)

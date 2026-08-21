@@ -507,23 +507,23 @@ function makeBear(kit) {
   nose.scale.set(1.15, 0.85, 1.05)
   nose.position.set(1.52, 1.22, 0)
   g.add(earL, earR, eyeL, eyeR, nose)
-  // legs: one lofted column each, foot flattened
+  // legs: one lofted column each, thick hip buried inside the body, foot flattened
   const legGeo = makeLoft([
-    { x: 0, cy: 0, ry: 0.17, rz: 0.17 },
-    { x: 0.3, cy: 0, ry: 0.135, rz: 0.14 },
-    { x: 0.55, cy: 0, ry: 0.12, rz: 0.13 },
-    { x: 0.72, cy: 0, ry: 0.11, rz: 0.15 }
+    { x: 0, cy: 0, ry: 0.2, rz: 0.19 },
+    { x: 0.35, cy: 0, ry: 0.14, rz: 0.14 },
+    { x: 0.65, cy: 0, ry: 0.12, rz: 0.13 },
+    { x: 0.9, cy: 0, ry: 0.12, rz: 0.15 }
   ], 8)
   legGeo.rotateZ(-Math.PI / 2)
   const legs = []
   const pawGeo = new THREE.SphereGeometry(0.14, 8, 6)
   for (const [sx, sz] of [[0.55, 0.34], [0.55, -0.34], [-0.55, 0.34], [-0.55, -0.34]]) {
     const pivot = new THREE.Group()
-    pivot.position.set(sx, 0.83, sz)
+    pivot.position.set(sx, 0.95, sz)
     const leg = new THREE.Mesh(legGeo, furMat)
     const paw = new THREE.Mesh(pawGeo, furMat)
     paw.scale.set(1.2, 0.5, 1.35)
-    paw.position.set(0.05, -0.8, 0)
+    paw.position.set(0.05, -0.88, 0)
     pivot.add(leg, paw)
     g.add(pivot)
     legs.push(pivot)
@@ -589,17 +589,17 @@ function makeFox(kit) {
   tail.position.set(-0.48, 0.42, 0)
   tail.rotation.z = 0.45
   g.add(tail)
-  // legs: thin lofted columns
+  // legs: thin lofted columns, hip buried in the body
   const legGeo = makeLoft([
-    { x: 0, cy: 0, ry: 0.06, rz: 0.06 },
-    { x: 0.18, cy: 0, ry: 0.045, rz: 0.048 },
-    { x: 0.28, cy: 0, ry: 0.04, rz: 0.055 }
+    { x: 0, cy: 0, ry: 0.065, rz: 0.06 },
+    { x: 0.2, cy: 0, ry: 0.048, rz: 0.05 },
+    { x: 0.34, cy: 0, ry: 0.045, rz: 0.06 }
   ], 8)
   legGeo.rotateZ(-Math.PI / 2)
   const legs = []
   for (const [sx, sz] of [[0.38, 0.13], [0.38, -0.13], [-0.35, 0.14], [-0.35, -0.14]]) {
     const pivot = new THREE.Group()
-    pivot.position.set(sx, 0.3, sz)
+    pivot.position.set(sx, 0.34, sz)
     pivot.add(new THREE.Mesh(legGeo, furMat))
     g.add(pivot)
     legs.push(pivot)
@@ -675,22 +675,22 @@ function makeReindeer(withAntlers, kit) {
   const tail = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), furMat)
   tail.position.set(-0.74, 1.12, 0)
   g.add(tail)
-  // legs: long thin lofted columns with dark hooves
+  // legs: long thin lofted columns with dark hooves, hip buried in the body
   const legGeo = makeLoft([
-    { x: 0, cy: 0, ry: 0.095, rz: 0.095 },
+    { x: 0, cy: 0, ry: 0.1, rz: 0.1 },
     { x: 0.45, cy: 0, ry: 0.07, rz: 0.07 },
-    { x: 0.7, cy: 0, ry: 0.055, rz: 0.06 },
-    { x: 0.8, cy: 0, ry: 0.05, rz: 0.07 }
+    { x: 0.75, cy: 0, ry: 0.055, rz: 0.06 },
+    { x: 0.9, cy: 0, ry: 0.05, rz: 0.07 }
   ], 8)
   legGeo.rotateZ(-Math.PI / 2)
   const hoofGeo = new THREE.CylinderGeometry(0.05, 0.058, 0.1, 6)
   const legs = []
   for (const [sx, sz] of [[0.45, 0.18], [0.45, -0.18], [-0.5, 0.18], [-0.5, -0.18]]) {
     const pivot = new THREE.Group()
-    pivot.position.set(sx, 0.85, sz)
+    pivot.position.set(sx, 0.95, sz)
     const leg = new THREE.Mesh(legGeo, furMat)
     const hoof = new THREE.Mesh(hoofGeo, dark)
-    hoof.position.y = -0.8
+    hoof.position.y = -0.87
     pivot.add(leg, hoof)
     g.add(pivot)
     legs.push(pivot)
