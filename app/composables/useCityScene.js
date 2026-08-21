@@ -633,6 +633,297 @@ function makeSteelCanvas() {
   return c
 }
 
+// ---------- landmark textures ----------
+
+function makePanelCanvas() {
+  const S = 256
+  const c = document.createElement('canvas')
+  c.width = c.height = S
+  const ctx = c.getContext('2d')
+  const g = ctx.createLinearGradient(0, 0, 0, S)
+  g.addColorStop(0, '#5f6b80')
+  g.addColorStop(0.5, '#4d586c')
+  g.addColorStop(1, '#414b5e')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, S, S)
+  // vertical cladding seams
+  for (let x = 0; x < S; x += 32) {
+    ctx.fillStyle = 'rgba(18,22,32,0.55)'
+    ctx.fillRect(x, 0, 2, S)
+    ctx.fillStyle = 'rgba(210,220,240,0.14)'
+    ctx.fillRect(x + 2, 0, 1, S)
+  }
+  // horizontal joint lines
+  for (let y = 0; y < S; y += 42) {
+    ctx.fillStyle = 'rgba(15,18,28,0.5)'
+    ctx.fillRect(0, y, S, 2.5)
+    ctx.fillStyle = 'rgba(215,225,245,0.16)'
+    ctx.fillRect(0, y + 2.5, S, 1)
+  }
+  // rivets at panel intersections
+  ctx.fillStyle = 'rgba(190,200,220,0.35)'
+  for (let y = 21; y < S; y += 42) {
+    for (let x = 16; x < S; x += 32) {
+      ctx.beginPath()
+      ctx.arc(x, y, 1.4, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  // mottled oxidation
+  for (let i = 0; i < 26; i++) {
+    const x = Math.random() * S, y = Math.random() * S
+    const r = 8 + Math.random() * 22
+    const mg = ctx.createRadialGradient(x, y, 0, x, y, r)
+    mg.addColorStop(0, Math.random() < 0.5 ? 'rgba(120,135,160,0.14)' : 'rgba(25,30,42,0.16)')
+    mg.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = mg
+    ctx.fillRect(x - r, y - r, r * 2, r * 2)
+  }
+  // grime streaks dripping from joints
+  for (let i = 0; i < 12; i++) {
+    const x = Math.random() * S
+    const y0 = Math.floor(Math.random() * 6) * 42
+    const len = 16 + Math.random() * 30
+    const sg = ctx.createLinearGradient(0, y0, 0, y0 + len)
+    sg.addColorStop(0, 'rgba(20,24,34,0.25)')
+    sg.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = sg
+    ctx.fillRect(x, y0, 1.6, len)
+  }
+  // fine grain
+  for (let i = 0; i < 2400; i++) {
+    ctx.fillStyle = Math.random() < 0.5
+      ? `rgba(220,228,244,${0.03 + Math.random() * 0.05})`
+      : `rgba(12,16,24,${0.04 + Math.random() * 0.06})`
+    ctx.fillRect(Math.random() * S, Math.random() * S, 1, 1)
+  }
+  return c
+}
+
+function makeRoofRibCanvas() {
+  const S = 128
+  const c = document.createElement('canvas')
+  c.width = c.height = S
+  const ctx = c.getContext('2d')
+  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64)
+  g.addColorStop(0, '#5a6680')
+  g.addColorStop(1, '#3c455a')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, S, S)
+  // radial ribs
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2
+    ctx.strokeStyle = 'rgba(18,22,32,0.6)'
+    ctx.lineWidth = 2.5
+    ctx.beginPath()
+    ctx.moveTo(64 + Math.cos(a) * 6, 64 + Math.sin(a) * 6)
+    ctx.lineTo(64 + Math.cos(a) * 64, 64 + Math.sin(a) * 64)
+    ctx.stroke()
+    ctx.strokeStyle = 'rgba(200,212,235,0.18)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(64 + Math.cos(a + 0.12) * 6, 64 + Math.sin(a + 0.12) * 6)
+    ctx.lineTo(64 + Math.cos(a + 0.12) * 64, 64 + Math.sin(a + 0.12) * 64)
+    ctx.stroke()
+  }
+  // ring seams
+  for (const r of [22, 40, 56]) {
+    ctx.beginPath()
+    ctx.arc(64, 64, r, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(15,18,28,0.55)'
+    ctx.lineWidth = 2
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(64, 64, r + 1.5, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(205,216,240,0.14)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+  }
+  for (let i = 0; i < 700; i++) {
+    ctx.fillStyle = Math.random() < 0.5
+      ? `rgba(210,220,240,${0.03 + Math.random() * 0.05})`
+      : `rgba(10,14,22,${0.05 + Math.random() * 0.08})`
+    ctx.fillRect(Math.random() * S, Math.random() * S, 1, 1)
+  }
+  return c
+}
+
+function makeStoneCanvas() {
+  const S = 256
+  const c = document.createElement('canvas')
+  c.width = c.height = S
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#31353f'
+  ctx.fillRect(0, 0, S, S)
+  const bh = 32, bl = 44
+  for (let y = 0; y < S; y += bh) {
+    const off = (Math.floor(y / bh) % 2) * (bl / 2)
+    for (let x = -bl; x < S + bl; x += bl) {
+      const v = 0.72 + Math.random() * 0.55
+      ctx.fillStyle = `rgb(${Math.floor(104 * v)},${Math.floor(110 * v)},${Math.floor(126 * v)})`
+      ctx.fillRect(x + off + 1.5, y + 1.5, bl - 3, bh - 3)
+      ctx.fillStyle = 'rgba(255,255,255,0.09)'
+      ctx.fillRect(x + off + 1.5, y + 1.5, bl - 3, 2)
+      ctx.fillStyle = 'rgba(0,0,0,0.2)'
+      ctx.fillRect(x + off + 1.5, y + bh - 3.5, bl - 3, 2)
+      ctx.fillRect(x + off + bl - 3.5, y + 1.5, 2, bh - 3)
+      for (let i = 0; i < 26; i++) {
+        ctx.fillStyle = Math.random() < 0.5
+          ? `rgba(255,255,255,${0.03 + Math.random() * 0.05})`
+          : `rgba(0,0,0,${0.04 + Math.random() * 0.06})`
+        ctx.fillRect(x + off + 2 + Math.random() * (bl - 5), y + 2 + Math.random() * (bh - 5), 1, 1)
+      }
+    }
+  }
+  // water stains running down from the top
+  for (let i = 0; i < 16; i++) {
+    const x = Math.random() * S
+    const y0 = 4 + Math.random() * 30
+    const len = 20 + Math.random() * 50
+    const sg = ctx.createLinearGradient(0, y0, 0, y0 + len)
+    sg.addColorStop(0, 'rgba(10,14,20,0.22)')
+    sg.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = sg
+    ctx.fillRect(x, y0, 1.6 + Math.random(), len)
+  }
+  // bottom grime build-up
+  const gB = ctx.createLinearGradient(0, S, 0, S - 60)
+  gB.addColorStop(0, 'rgba(0,0,0,0.3)')
+  gB.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = gB
+  ctx.fillRect(0, S - 60, S, 60)
+  // mossy patches
+  for (let i = 0; i < 10; i++) {
+    const x = Math.random() * S, y = Math.random() * S
+    const r = 6 + Math.random() * 14
+    const mg = ctx.createRadialGradient(x, y, 0, x, y, r)
+    mg.addColorStop(0, `rgba(60,90,70,${0.12 + Math.random() * 0.1})`)
+    mg.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = mg
+    ctx.fillRect(x - r, y - r, r * 2, r * 2)
+  }
+  return c
+}
+
+function makeRippleCanvas() {
+  const S = 256
+  const c = document.createElement('canvas')
+  c.width = c.height = S
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#0d3a50'
+  ctx.fillRect(0, 0, S, S)
+  // concentric ripples
+  for (let r = 12; r < 130; r += 9 + Math.random() * 6) {
+    ctx.beginPath()
+    ctx.arc(128, 128, r, 0, Math.PI * 2)
+    ctx.strokeStyle = `rgba(140,225,255,${0.08 + Math.random() * 0.14})`
+    ctx.lineWidth = 1.5 + Math.random() * 1.5
+    ctx.stroke()
+  }
+  // radial shimmer streaks
+  for (let i = 0; i < 26; i++) {
+    const a = Math.random() * Math.PI * 2
+    const r0 = 20 + Math.random() * 40
+    const r1 = r0 + 25 + Math.random() * 55
+    ctx.beginPath()
+    ctx.moveTo(128 + Math.cos(a) * r0, 128 + Math.sin(a) * r0)
+    ctx.lineTo(128 + Math.cos(a) * r1, 128 + Math.sin(a) * r1)
+    ctx.strokeStyle = `rgba(170,235,255,${0.05 + Math.random() * 0.09})`
+    ctx.lineWidth = 1 + Math.random() * 2
+    ctx.stroke()
+  }
+  // bright center glow
+  const cg = ctx.createRadialGradient(128, 128, 0, 128, 128, 70)
+  cg.addColorStop(0, 'rgba(150,230,255,0.5)')
+  cg.addColorStop(1, 'rgba(120,210,255,0)')
+  ctx.fillStyle = cg
+  ctx.fillRect(0, 0, S, S)
+  // sparkle dots
+  for (let i = 0; i < 160; i++) {
+    const a = Math.random() * Math.PI * 2
+    const r = Math.random() * 125
+    ctx.fillStyle = `rgba(210,245,255,${0.15 + Math.random() * 0.4})`
+    ctx.fillRect(128 + Math.cos(a) * r, 128 + Math.sin(a) * r, 1.5, 1.5)
+  }
+  return c
+}
+
+function makeBarkCanvas() {
+  const S = 128
+  const c = document.createElement('canvas')
+  c.width = c.height = S
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#6b5744'
+  ctx.fillRect(0, 0, S, S)
+  // vertical bark furrows
+  for (let i = 0; i < 42; i++) {
+    const x = Math.random() * S
+    const w = 1 + Math.random() * 2.5
+    const light = Math.random() < 0.4
+    ctx.fillStyle = light
+      ? `rgba(160,135,105,${0.25 + Math.random() * 0.3})`
+      : `rgba(52,40,30,${0.3 + Math.random() * 0.35})`
+    ctx.fillRect(x, 0, w, S)
+    for (let j = 0; j < 3; j++) {
+      ctx.fillRect(x + (Math.random() - 0.5) * 3, Math.random() * S, w, 4 + Math.random() * 10)
+    }
+  }
+  // knots
+  for (let i = 0; i < 3; i++) {
+    const x = 12 + Math.random() * (S - 24)
+    const y = 16 + Math.random() * (S - 32)
+    ctx.fillStyle = 'rgba(40,30,22,0.8)'
+    ctx.beginPath()
+    ctx.ellipse(x, y, 3, 5, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(30,22,16,0.5)'
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.ellipse(x, y, 5.5, 8, 0, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+  // lichen speckle
+  for (let i = 0; i < 90; i++) {
+    ctx.fillStyle = `rgba(150,160,130,${0.08 + Math.random() * 0.12})`
+    ctx.fillRect(Math.random() * S, Math.random() * S, 1.5, 1.5)
+  }
+  return c
+}
+
+function makeFoliageCanvas() {
+  const S = 128
+  const c = document.createElement('canvas')
+  c.width = c.height = S
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#47854f'
+  ctx.fillRect(0, 0, S, S)
+  const shades = ['#5c9c62', '#3c7446', '#6aa968', '#35623c', '#549459']
+  for (let i = 0; i < 70; i++) {
+    const x = Math.random() * S, y = Math.random() * S
+    const r = 4 + Math.random() * 12
+    ctx.fillStyle = shades[Math.floor(Math.random() * shades.length)]
+    ctx.globalAlpha = 0.25 + Math.random() * 0.4
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.globalAlpha = 1
+  // moonlit rim on the upper edge
+  const topG = ctx.createLinearGradient(0, 0, 0, S)
+  topG.addColorStop(0, 'rgba(190,230,180,0.35)')
+  topG.addColorStop(0.35, 'rgba(190,230,180,0)')
+  ctx.fillStyle = topG
+  ctx.fillRect(0, 0, S, S)
+  // fine leaf speckle
+  for (let i = 0; i < 1400; i++) {
+    ctx.fillStyle = Math.random() < 0.5
+      ? `rgba(200,240,190,${0.06 + Math.random() * 0.1})`
+      : `rgba(20,50,30,${0.08 + Math.random() * 0.12})`
+    ctx.fillRect(Math.random() * S, Math.random() * S, 1, 1)
+  }
+  return c
+}
+
 // ---------- car models (forward = +z) ----------
 
 function makeSedan(color, wheelGeo, wheelMat) {
@@ -921,6 +1212,7 @@ export function useCityScene(containerRef) {
       for (const g of ROADS) {
         for (const o of [-12, 12]) {
           for (const [px, pz] of [[g, o], [o, g]]) {
+            if (Math.abs(px) < 5 && pz > 8 && pz < 19) continue // spire platform occupies this spot
             dummy.position.set(px, 0, pz)
             dummy.rotation.set(0, Math.random() * Math.PI, 0)
             dummy.scale.setScalar(1)
@@ -941,12 +1233,51 @@ export function useCityScene(containerRef) {
     // ---- trees (parks + plaza) ----
     {
       const count = 34
-      const trunkGeo = new THREE.CylinderGeometry(0.14, 0.2, 1.6, 6)
-      trunkGeo.translate(0, 0.8, 0)
-      const crownGeo = new THREE.ConeGeometry(1.5, 3.2, 7)
-      crownGeo.translate(0, 3.2, 0)
-      treeTrunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: 0x4a3a2e, roughness: 0.9 }), count)
-      treeCrowns = new THREE.InstancedMesh(crownGeo, new THREE.MeshStandardMaterial({ color: 0x2a5236, roughness: 0.85, flatShading: true }), count)
+      // trunk: root flare + curved tapered body + angled branch stubs
+      const trunkParts = []
+      trunkParts.push(new THREE.CylinderGeometry(0.3, 0.44, 0.35, 7).translate(0, 0.175, 0))
+      {
+        const body = new THREE.CylinderGeometry(0.1, 0.2, 1.55, 7, 5)
+        const pos = body.attributes.position
+        for (let i = 0; i < pos.count; i++) {
+          const y0 = pos.getY(i)
+          const t = (y0 + 0.775) / 1.55
+          pos.setY(i, y0 + 1.05)
+          pos.setX(i, pos.getX(i) + t * t * 0.3)
+          pos.setZ(i, pos.getZ(i) + t * t * 0.12)
+        }
+        body.computeVertexNormals()
+        trunkParts.push(body)
+      }
+      for (const [a, len, lift] of [[0.6, 0.55, 0], [2.7, 0.45, 0.5], [4.8, 0.6, 1], [0.9, 0.4, 0.75]]) {
+        const t = 0.55 + lift * 0.25
+        const bx = t * t * 0.3, bz = t * t * 0.12, by = 0.275 + 1.55 * t
+        const dir = new THREE.Vector3(Math.cos(a), 0.5, Math.sin(a)).normalize()
+        const br = new THREE.CylinderGeometry(0.03, 0.055, len, 5)
+        br.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir))
+        br.translate(bx + dir.x * len / 2, by + dir.y * len / 2, bz + dir.z * len / 2)
+        trunkParts.push(br)
+      }
+      const trunkGeo = BufferGeometryUtils.mergeGeometries(trunkParts, false)
+      // canopy: three joined cones with offset joints for a natural silhouette
+      const crownParts = []
+      crownParts.push(new THREE.ConeGeometry(1.5, 3.0, 7).translate(0.28, 3.3, 0.1))
+      crownParts.push(new THREE.ConeGeometry(1.0, 2.1, 6).translate(0.8, 2.5, 0.4))
+      crownParts.push(new THREE.ConeGeometry(0.85, 1.8, 6).translate(-0.4, 2.8, -0.5))
+      const crownGeo = BufferGeometryUtils.mergeGeometries(crownParts, false)
+      const barkTex = toTex(makeBarkCanvas())
+      const leafTex = toTex(makeFoliageCanvas())
+      texAssets.push(barkTex, leafTex)
+      const trunkMat = new THREE.MeshStandardMaterial({
+        map: barkTex, bumpMap: barkTex, bumpScale: 0.2, color: 0xffffff, roughness: 0.95
+      })
+      const crownMat = new THREE.MeshStandardMaterial({
+        map: leafTex, bumpMap: leafTex, bumpScale: 0.15,
+        color: 0xffffff, emissive: 0x143219, emissiveIntensity: 0.55,
+        roughness: 0.9, flatShading: true
+      })
+      treeTrunks = new THREE.InstancedMesh(trunkGeo, trunkMat, count)
+      treeCrowns = new THREE.InstancedMesh(crownGeo, crownMat, count)
       const dummy = new THREE.Object3D()
       let placed = 0
       const parks = [[-10, -50], [10, 50], [50, 10], [-50, 10], [-30, -10]]
@@ -1029,7 +1360,18 @@ export function useCityScene(containerRef) {
           jet.mesh.scale.y = s
           jet.mesh.position.y = jet.baseY + (jet.height * s) / 2
         }
-        fountain.disc.scale.set(1 + Math.sin(elapsed * 1.2) * 0.05, 1, 1 + Math.sin(elapsed * 1.2) * 0.05)
+        const p = 1 + Math.sin(elapsed * 1.2) * 0.04
+        fountain.disc.scale.set(p, 1, p)
+        fountain.disc2.scale.set(p, 1, p)
+        fountain.disc.rotation.y = elapsed * 0.1
+        fountain.disc2.rotation.y = -elapsed * 0.18
+        for (const m of fountain.mist) {
+          const t = (elapsed * m.speed + m.phase) % 1
+          const rr = m.r * (1 + t * 0.3)
+          m.sprite.position.set(Math.cos(m.a) * rr, m.baseY + t * m.rise, Math.sin(m.a) * rr)
+          m.sprite.scale.setScalar(m.size * (0.5 + t * 1.2))
+          m.sprite.material.opacity = 0.38 * (1 - t) * Math.min(1, t * 5)
+        }
       }
       orbit.update()
       renderer.render(scene, camera)
@@ -1268,35 +1610,137 @@ export function useCityScene(containerRef) {
 
   function createSpire() {
     const g = new THREE.Group()
-    const metal = new THREE.MeshStandardMaterial({ color: 0x6a7688, roughness: 0.4, metalness: 0.6, emissive: 0x2a3344, emissiveIntensity: 0.35 })
-    const dark = new THREE.MeshStandardMaterial({ color: 0x4a5262, roughness: 0.5, metalness: 0.5, emissive: 0x222a38, emissiveIntensity: 0.35 })
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.8, 2.2, 12), dark)
-    base.position.y = 1.1
-    g.add(base)
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 2.8, 26, 12), metal)
-    shaft.position.y = 15
-    g.add(shaft)
-    const deck = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 3.4, 1.4, 12), dark)
-    deck.position.y = 28.6
-    g.add(deck)
+    const panelTex = toTex(makePanelCanvas())
+    const roofRibTex = toTex(makeRoofRibCanvas())
+    const steelTex = toTex(makeSteelCanvas())
+    const stoneTex = toTex(makeStoneCanvas())
+    texAssets.push(panelTex, roofRibTex, steelTex, stoneTex)
+    const panelMat = new THREE.MeshStandardMaterial({
+      map: panelTex, bumpMap: panelTex, bumpScale: 0.06,
+      emissiveMap: panelTex, emissive: 0xffffff, emissiveIntensity: 0.32,
+      color: 0xffffff, roughness: 0.45, metalness: 0.55, vertexColors: true
+    })
+    const steelMat = new THREE.MeshStandardMaterial({
+      map: steelTex, bumpMap: steelTex, bumpScale: 0.04,
+      emissiveMap: steelTex, emissive: 0xffffff, emissiveIntensity: 0.3,
+      color: 0xffffff, roughness: 0.5, metalness: 0.6, vertexColors: true
+    })
+    const stoneMat = new THREE.MeshStandardMaterial({
+      map: stoneTex, bumpMap: stoneTex, bumpScale: 0.1,
+      emissiveMap: stoneTex, emissive: 0xffffff, emissiveIntensity: 0.25,
+      color: 0xffffff, roughness: 0.8, metalness: 0.1, vertexColors: true
+    })
+    const roofMat = new THREE.MeshStandardMaterial({
+      map: roofRibTex, bumpMap: roofRibTex, bumpScale: 0.08,
+      emissiveMap: roofRibTex, emissive: 0xffffff, emissiveIntensity: 0.4,
+      color: 0xffffff, roughness: 0.5, metalness: 0.45
+    })
+    const panel = []
+    const steel = []
+    const steps = []
+    const P = (geo, v = 1) => panel.push(tintGeo(geo, v * 0.96, v * 0.97, v))
+    const T = (geo, v = 1) => steel.push(tintGeo(geo, v, v, v * 0.98))
+    const K = (geo, v = 1) => steps.push(tintGeo(geo, v, v, v))
+    const strut = (a, b, r, v) => {
+      const mid = a.clone().add(b).multiplyScalar(0.5)
+      const len = a.distanceTo(b)
+      const cyl = new THREE.CylinderGeometry(r, r, len, 4)
+      cyl.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize()))
+      cyl.translate(mid.x, mid.y, mid.z)
+      return tintGeo(cyl, v, v, v)
+    }
+
+    // stepped plaza platform (deeper setback on the road side so traffic clears it)
+    K(new THREE.BoxGeometry(9, 0.35, 8).translate(0, 0.175, 0), 1)
+    K(new THREE.BoxGeometry(7.9, 0.35, 7.1).translate(0, 0.525, 0), 0.94)
+    K(new THREE.BoxGeometry(6.8, 0.35, 6.2).translate(0, 0.875, 0), 0.88)
+
+    // base drum + flared podium collar (first silhouette break)
+    P(new THREE.CylinderGeometry(2.6, 3.4, 3.2, 10).translate(0, 2.65, 0), 0.92)
+    P(new THREE.CylinderGeometry(3.0, 2.7, 0.6, 10).translate(0, 4.55, 0), 1.08)
+
+    // segmented shaft with ring collars at every joint
+    P(new THREE.CylinderGeometry(2.2, 2.6, 5, 8).translate(0, 7.35, 0))
+    P(new THREE.CylinderGeometry(2.32, 2.32, 0.35, 8).translate(0, 10.02, 0), 1.15)
+    P(new THREE.CylinderGeometry(1.95, 2.2, 5, 8).translate(0, 12.7, 0), 0.95)
+    P(new THREE.CylinderGeometry(2.08, 2.08, 0.35, 8).translate(0, 15.37, 0), 1.15)
+    P(new THREE.CylinderGeometry(1.7, 1.95, 5, 8).translate(0, 17.95, 0))
+    P(new THREE.CylinderGeometry(1.83, 1.83, 0.35, 8).translate(0, 20.72, 0), 1.15)
+    P(new THREE.CylinderGeometry(1.35, 1.7, 6, 8).translate(0, 23.9, 0), 0.97)
+    // flared observation transition + deck slab
+    P(new THREE.CylinderGeometry(3.7, 1.35, 1.3, 10).translate(0, 27.55, 0), 1.05)
+    T(new THREE.CylinderGeometry(4.3, 3.7, 0.5, 12).translate(0, 28.45, 0), 0.85)
+
+    // glass observation band
     const glass = new THREE.Mesh(
-      new THREE.CylinderGeometry(3.9, 3.9, 0.9, 16),
+      new THREE.CylinderGeometry(3.85, 3.85, 0.95, 16),
       new THREE.MeshStandardMaterial({ color: 0x0e2434, emissive: 0x55ddff, emissiveIntensity: 1.6, roughness: 0.3 })
     )
-    glass.position.y = 29.4
+    glass.position.y = 29.25
     g.add(glass)
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(2.6, 2.4, 10), dark)
-    roof.position.y = 31.3
+
+    // deck railing: 20 posts + double rails
+    for (let i = 0; i < 20; i++) {
+      const a = (i / 20) * Math.PI * 2
+      T(new THREE.CylinderGeometry(0.03, 0.035, 0.7, 4).translate(Math.cos(a) * 4.1, 29.1, Math.sin(a) * 4.1), 0.9)
+    }
+    T(new THREE.TorusGeometry(4.1, 0.045, 6, 28).rotateX(Math.PI / 2).translate(0, 29.5, 0), 1.05)
+    T(new THREE.TorusGeometry(4.1, 0.035, 6, 28).rotateX(Math.PI / 2).translate(0, 28.85, 0), 0.8)
+
+    // leaning corner pylons under the roof
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4
+      const py = new THREE.CylinderGeometry(0.11, 0.16, 1.15, 6)
+      py.translate(0, 0.575, 0)
+      py.applyQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(-Math.sin(a), 0, Math.cos(a)), -0.14))
+      py.translate(Math.cos(a) * 3.35, 30.15, Math.sin(a) * 3.35)
+      T(py, 0.88)
+    }
+
+    // roof drum + ribbed cone + finial
+    T(new THREE.CylinderGeometry(3.3, 3.3, 0.55, 12).translate(0, 30.05, 0), 0.8)
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(2.9, 2.7, 10), roofMat)
+    roof.position.y = 31.65
+    roof.castShadow = true
     g.add(roof)
-    const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 7, 6), metal)
-    antenna.position.y = 36.2
-    g.add(antenna)
+    T(new THREE.SphereGeometry(0.18, 8, 6).translate(0, 33.15, 0), 1.0)
+
+    // segmented antenna mast: three sections, two collars, X brace
+    T(new THREE.CylinderGeometry(0.2, 0.24, 0.25, 8).translate(0, 33.5, 0), 0.9)
+    T(new THREE.CylinderGeometry(0.09, 0.11, 3.6, 6).translate(0, 35.4, 0), 1.05)
+    steel.push(strut(new THREE.Vector3(0.13, 33.9, 0), new THREE.Vector3(-0.13, 36.7, 0), 0.02, 0.8))
+    steel.push(strut(new THREE.Vector3(-0.13, 33.9, 0), new THREE.Vector3(0.13, 36.7, 0), 0.02, 0.8))
+    T(new THREE.CylinderGeometry(0.15, 0.15, 0.18, 8).translate(0, 37.29, 0), 1.1)
+    T(new THREE.CylinderGeometry(0.065, 0.085, 2.6, 6).translate(0, 38.68, 0), 1.05)
+    T(new THREE.CylinderGeometry(0.11, 0.11, 0.15, 8).translate(0, 40.05, 0), 1.1)
+    T(new THREE.CylinderGeometry(0.04, 0.06, 1.6, 6).translate(0, 40.92, 0), 1.0)
+    // guy wires pinning the mast to the deck railing
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2
+      steel.push(strut(
+        new THREE.Vector3(Math.cos(a) * 0.1, 34.5, Math.sin(a) * 0.1),
+        new THREE.Vector3(Math.cos(a) * 4.0, 29.45, Math.sin(a) * 4.0),
+        0.018, 0.55
+      ))
+    }
+
+    const panelMesh = new THREE.Mesh(BufferGeometryUtils.mergeGeometries(panel, false), panelMat)
+    panelMesh.castShadow = true
+    const steelMesh = new THREE.Mesh(BufferGeometryUtils.mergeGeometries(steel, false), steelMat)
+    steelMesh.castShadow = true
+    const stepMesh = new THREE.Mesh(BufferGeometryUtils.mergeGeometries(steps, false), stoneMat)
+    stepMesh.castShadow = true
+    stepMesh.receiveShadow = true
+    g.add(stepMesh, panelMesh, steelMesh)
+
+    // blinking beacon at the mast tip
     blinkMat = new THREE.MeshStandardMaterial({ color: 0x3a0a0a, emissive: 0xff2211, emissiveIntensity: 1 })
     const blink = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 6), blinkMat)
-    blink.position.y = 39.8
+    blink.position.y = 41.9
     g.add(blink)
+    // rotating beacon beams at the observation deck
     beaconGroup = new THREE.Group()
-    beaconGroup.position.y = 30.5
+    beaconGroup.position.y = 29.25
     const beamMat = new THREE.MeshBasicMaterial({
       color: 0x9fe8ff, transparent: true, opacity: 0.16,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
@@ -1309,8 +1753,7 @@ export function useCityScene(containerRef) {
       beaconGroup.add(beam)
     }
     g.add(beaconGroup)
-    for (const m of [base, shaft, deck, roof]) m.castShadow = true
-    g.position.set(0, 0, 13)
+    g.position.set(0, 0, 13.5)
     scene.add(g)
   }
 
@@ -1577,33 +2020,146 @@ export function useCityScene(containerRef) {
 
   function createFountain() {
     const g = new THREE.Group()
-    const stone = new THREE.MeshStandardMaterial({ color: 0x565a68, roughness: 0.7, metalness: 0.2, emissive: 0x222a38, emissiveIntensity: 0.3 })
-    const pool = new THREE.Mesh(new THREE.CylinderGeometry(7, 7.6, 0.5, 24), stone)
-    pool.position.y = 0.25
-    g.add(pool)
-    const disc = new THREE.Mesh(
-      new THREE.CylinderGeometry(6.6, 6.6, 0.12, 24),
-      new THREE.MeshStandardMaterial({ color: 0x0e3a4e, emissive: 0x33ddff, emissiveIntensity: 1.2, transparent: true, opacity: 0.85 })
-    )
-    disc.position.y = 0.52
+    const stoneTex = toTex(makeStoneCanvas())
+    const rippleTex = toTex(makeRippleCanvas())
+    texAssets.push(stoneTex, rippleTex)
+    const stoneMat = new THREE.MeshStandardMaterial({
+      map: stoneTex, bumpMap: stoneTex, bumpScale: 0.12,
+      emissiveMap: stoneTex, emissive: 0xffffff, emissiveIntensity: 0.28,
+      color: 0xffffff, roughness: 0.75, metalness: 0.1, vertexColors: true
+    })
+    const waterMat = new THREE.MeshStandardMaterial({
+      map: rippleTex, emissiveMap: rippleTex, emissive: 0x66d8ff, emissiveIntensity: 1.1,
+      color: 0xffffff, roughness: 0.25, metalness: 0.3, transparent: true, opacity: 0.85
+    })
+    const stoneParts = []
+    const S = (geo, v = 1) => stoneParts.push(tintGeo(geo, v, v, v))
+
+    // stepped stone terrace
+    S(new THREE.CylinderGeometry(8.4, 8.8, 0.4, 28).translate(0, 0.2, 0), 1)
+    S(new THREE.CylinderGeometry(7.9, 8.3, 0.4, 28).translate(0, 0.6, 0), 0.94)
+    // pool wall + overhanging rim band
+    S(new THREE.CylinderGeometry(7.0, 7.4, 0.95, 28).translate(0, 1.275, 0), 0.95)
+    S(new THREE.CylinderGeometry(7.35, 7.15, 0.55, 28).translate(0, 2.025, 0), 1.06)
+    // corbel brackets under the rim (alternating heights, tilted outward)
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2
+      const h = i % 2 === 0 ? 0.45 : 0.34
+      const cor = new THREE.BoxGeometry(0.55, h, 0.3)
+      cor.translate(0, h / 2, 0)
+      cor.rotateX(0.3)
+      cor.rotateY(a)
+      cor.translate(Math.cos(a) * 7.2, 1.5, Math.sin(a) * 7.2)
+      S(cor, 1.1)
+    }
+
+    // pool water + under-glow + rim light
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(6.85, 6.85, 0.08, 28), waterMat)
+    disc.position.y = 2.14
     g.add(disc)
+    const glow = new THREE.Mesh(
+      new THREE.CylinderGeometry(6.9, 6.9, 0.2, 28),
+      new THREE.MeshBasicMaterial({ color: 0x2fb8e0, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending })
+    )
+    glow.position.y = 1.95
+    g.add(glow)
+    const rimLight = new THREE.Mesh(
+      new THREE.TorusGeometry(7.05, 0.07, 8, 40),
+      new THREE.MeshStandardMaterial({ color: 0x0a2a38, emissive: 0x33ddff, emissiveIntensity: 1.6 })
+    )
+    rimLight.rotation.x = Math.PI / 2
+    rimLight.position.y = 2.26
+    g.add(rimLight)
+
+    // central pedestal: plinth, column, collar, upper cup
+    S(new THREE.CylinderGeometry(1.4, 1.7, 0.5, 10).translate(0, 2.4, 0), 0.98)
+    S(new THREE.CylinderGeometry(0.55, 0.85, 1.4, 8).translate(0, 3.35, 0), 1.0)
+    S(new THREE.CylinderGeometry(0.8, 0.8, 0.2, 10).translate(0, 4.15, 0), 1.1)
+    S(new THREE.CylinderGeometry(1.15, 0.5, 0.5, 10).translate(0, 4.5, 0), 0.95)
+    const disc2 = new THREE.Mesh(new THREE.CylinderGeometry(1.02, 1.02, 0.07, 16), waterMat)
+    disc2.position.y = 4.82
+    g.add(disc2)
+
+    // four supply pipes with elbow joints feeding the upper cup
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2
+      const rx = Math.cos(a), rz = Math.sin(a)
+      S(new THREE.CylinderGeometry(0.07, 0.07, 1.3, 6).translate(rx * 1.3, 2.85, rz * 1.3), 1.05)
+      S(new THREE.SphereGeometry(0.09, 6, 5).translate(rx * 1.3, 3.5, rz * 1.3), 1.05)
+      const p1 = new THREE.Vector3(rx * 1.3, 3.5, rz * 1.3)
+      const p2 = new THREE.Vector3(rx * 1.02, 4.5, rz * 1.02)
+      const dir = p2.clone().sub(p1)
+      const len = dir.length()
+      const seg = new THREE.CylinderGeometry(0.06, 0.07, len, 6)
+      seg.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize()))
+      seg.translate((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, (p1.z + p2.z) / 2)
+      S(seg, 1.05)
+      S(new THREE.SphereGeometry(0.08, 6, 5).translate(p2.x, p2.y, p2.z), 1.05)
+    }
+
+    // nozzles for the outer rim jets
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4
+      S(new THREE.CylinderGeometry(0.12, 0.2, 0.4, 6).translate(Math.cos(a) * 4.8, 2.25, Math.sin(a) * 4.8), 1.05)
+    }
+    const stoneMesh = new THREE.Mesh(BufferGeometryUtils.mergeGeometries(stoneParts, false), stoneMat)
+    stoneMesh.castShadow = true
+    stoneMesh.receiveShadow = true
+    g.add(stoneMesh)
+
+    // jets: central + inner ring + outer rim with nozzles
     const jetMat = new THREE.MeshStandardMaterial({
       color: 0x9fe8ff, emissive: 0x66ccff, emissiveIntensity: 1.5,
       transparent: true, opacity: 0.85
     })
     const jets = []
-    const center = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 3, 8), jetMat)
-    center.position.y = 2
+    const center = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 3, 8), jetMat)
+    center.position.y = 4.85 + 1.5
     g.add(center)
-    jets.push({ mesh: center, phase: 0.3, baseY: 0.5, height: 3 })
+    jets.push({ mesh: center, phase: 0.3, baseY: 4.85, height: 3 })
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2
+      const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 1.2, 6), jetMat)
+      jet.position.set(Math.cos(a) * 0.95, 4.85 + 0.6, Math.sin(a) * 0.95)
+      g.add(jet)
+      jets.push({ mesh: jet, phase: i * 0.55, baseY: 4.85, height: 1.2 })
+    }
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2 + Math.PI / 4
-      const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 1.3, 6), jetMat)
-      jet.position.set(Math.cos(a) * 4.8, 1.1, Math.sin(a) * 4.8)
+      const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.24, 1.5, 6), jetMat)
+      jet.position.set(Math.cos(a) * 4.8, 2.15 + 0.75, Math.sin(a) * 4.8)
       g.add(jet)
-      jets.push({ mesh: jet, phase: i * 0.8, baseY: 0.45, height: 1.3 })
+      jets.push({ mesh: jet, phase: i * 0.8 + 0.2, baseY: 2.15, height: 1.5 })
     }
-    fountain = { group: g, jets, disc }
+
+    // rising mist sprites
+    const mistTex = makeRadialTexture(64, [
+      [0, 'rgba(190,240,255,0.6)'],
+      [0.5, 'rgba(150,220,255,0.22)'],
+      [1, 'rgba(120,200,255,0)']
+    ])
+    texAssets.push(mistTex)
+    const mist = []
+    const addMist = (a, r, baseY, size, rise, speed, phase) => {
+      const m = new THREE.SpriteMaterial({
+        map: mistTex, transparent: true, opacity: 0.35,
+        blending: THREE.AdditiveBlending, depthWrite: false
+      })
+      const s = new THREE.Sprite(m)
+      s.position.set(Math.cos(a) * r, baseY, Math.sin(a) * r)
+      g.add(s)
+      mist.push({ sprite: s, a, r, baseY, size, rise, speed, phase })
+    }
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2
+      addMist(a, 0.7, 5.6, 1.6, 2.2, 0.14, Math.random())
+    }
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4
+      addMist(a, 5.1, 3.3, 1.2, 1.4, 0.18, Math.random())
+    }
+
+    fountain = { group: g, jets, disc, disc2, mist }
     g.position.set(0, 0, 0)
     scene.add(g)
   }
