@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { useCameraMove } from './useCameraMove'
 
 // Simple 2D value noise (no external dependency)
 class SimpleNoise {
@@ -55,7 +56,7 @@ class SimpleNoise {
 }
 
 export function useScene(containerRef) {
-  let scene, camera, renderer, controls, animationId
+  let scene, camera, renderer, controls, animationId, stopCameraMove
   let cloudGroups = []
   let treeTrunkMesh, treeTopMesh, treeTop2Mesh
   let treeTopOrigMatrices = []
@@ -141,6 +142,7 @@ export function useScene(containerRef) {
     controls.minDistance = 20
     controls.maxDistance = 200
     controls.target.set(0, 5, 0)
+    stopCameraMove = useCameraMove(camera, controls, 25)
 
     // -- Lighting --
     setupLights()
@@ -1893,6 +1895,8 @@ export function useScene(containerRef) {
   function dispose() {
     if (animationId) cancelAnimationFrame(animationId)
     window.removeEventListener('resize', onResize)
+    stopCameraMove?.()
+    controls?.dispose()
     if (renderer) {
       const container = containerRef.value
       if (container && renderer.domElement.parentNode === container) {

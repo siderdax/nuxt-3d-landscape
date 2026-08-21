@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { useCameraMove } from './useCameraMove'
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 const WATER_Y = 0
@@ -1903,7 +1904,7 @@ function makeGull(texAssets) {
 // ---------- scene ----------
 
 export function useOceanScene(containerRef) {
-  let renderer, scene, camera, orbit, frame
+  let renderer, scene, camera, orbit, frame, stopCameraMove
   let disposed = false
   const autoRotate = ref(true)
   const texAssets = []
@@ -1950,6 +1951,7 @@ export function useOceanScene(containerRef) {
     orbit.minDistance = 6
     orbit.maxDistance = 130
     orbit.autoRotateSpeed = 0.25
+    stopCameraMove = useCameraMove(camera, orbit, 20)
 
     // ---- sky ----
     const sunTex = makeRadialTexture(128, [
@@ -2627,6 +2629,7 @@ export function useOceanScene(containerRef) {
     cancelAnimationFrame(frame)
     dispose.onCleanup?.()
     if (!scene) return
+    stopCameraMove?.()
     orbit?.dispose()
     scene.traverse((obj) => {
       if (obj.geometry) obj.geometry.dispose()

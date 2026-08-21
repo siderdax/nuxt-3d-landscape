@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
+import { useCameraMove } from './useCameraMove'
 
 const WATER_Y = -1.4
 const SAFE_H = -0.35
@@ -769,47 +770,81 @@ function makeSeededRand(seed) {
   return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646 }
 }
 
-// Merged "branchy pine": trunk + whorls of drooping branch stubs + cone layers + snow.
+// Merged "real-branch pine": lofted tapered trunk + whorls of lofted drooping
+// branches (needles) with a snow loft riding on every other branch.
 // Returns three merged geometries (wood / needles / snow) for instancing.
 function buildPineGeos(rand) {
   const wood = []
   const needles = []
   const snow = []
-  const trunk = new THREE.CylinderGeometry(0.08, 0.17, 1.5, 6)
-  trunk.translate(0, 0.75, 0)
+  const X = new THREE.Vector3(1, 0, 0)
+
+  // trunk: loft along +X, then stand it up
+  const trunk = makeLoft([
+    { x: 0, cy: 0, ry: 0.17, rz: 0.17 },
+    { x: 0.9, cy: 0, ry: 0.125, rz: 0.125 },
+    { x: 1.9, cy: 0, ry: 0.095, rz: 0.095 },
+    { x: 2.8, cy: 0, ry: 0.07, rz: 0.07 },
+    { x: 3.5, cy: 0.02, ry: 0.05, rz: 0.05 }
+  ], 6)
+  trunk.rotateZ(-Math.PI / 2)
   wood.push(trunk)
-  const up = new THREE.Vector3(0, 1, 0)
-  for (let i = 0; i < 4; i++) {
-    const t = i / 3
-    const y = 1.0 + i * 0.55
-    const r = 1.05 * (1 - t * 0.65) * (0.9 + rand() * 0.2)
-    const h = 0.95 - t * 0.2
-    const yaw = rand() * Math.PI
-    const layer = new THREE.ConeGeometry(r, h, 8)
-    layer.rotateY(yaw)
-    layer.translate(0, y + h * 0.45, 0)
-    needles.push(layer)
-    const sLayer = new THREE.ConeGeometry(r * 0.78, h * 0.5, 8)
-    sLayer.rotateY(yaw)
-    sLayer.translate(0, y + h * 0.78, 0)
-    snow.push(sLayer)
-    for (let b = 0; b < 6; b++) {
-      const a = (b / 6) * Math.PI * 2 + rand() * 0.8
-      const brLen = r * (0.5 + rand() * 0.3)
-      const br = new THREE.CylinderGeometry(0.025, 0.05, brLen, 5)
-      br.translate(0, brLen / 2, 0)
-      const d = new THREE.Vector3(Math.cos(a), -0.35, Math.sin(a)).normalize()
-      br.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(up, d))
-      br.translate(Math.cos(a) * 0.12, y + 0.1, Math.sin(a) * 0.12)
-      wood.push(br)
+
+  const loftTo = (sections, q, px, py, pz) => {
+    const g = makeLoft(sections, 5)
+    g.applyQuaternion(q)
+    g.translate(px, py, pz)
+    return g
+  }
+
+  const addBranch = (y, a, len, droop, baseR, withSnow) => {
+    const d = new THREE.Vector3(Math.cos(a), -droop, Math.sin(a)).normalize()
+    const q = new THREE.Quaternion().setFromUnitVectors(X, d)
+    const px = Math.cos(a) * 0.13
+    const pz = Math.sin(a) * 0.13
+    const sec = (cy, mul) => [
+      { x: 0, cy, ry: baseR * mul, rz: baseR * mul },
+      { x: len * 0.4, cy, ry: baseR * mul * 0.7, rz: baseR * mul * 0.7 },
+      { x: len * 0.75, cy: cy - 0.015, ry: baseR * mul * 0.4, rz: baseR * mul * 0.4 },
+      { x: len, cy: cy - 0.04, ry: baseR * mul * 0.12, rz: baseR * mul * 0.12 }
+    ]
+    needles.push(loftTo(sec(0, 1), q, px, y, pz))
+    if (withSnow) snow.push(loftTo(sec(0.035, 0.6), q, px, y, pz))
+  }
+
+  const whorls = [
+    { y: 1.15, count: 6, len: 1.25, droop: 0.42, r: 0.075 },
+    { y: 1.62, count: 6, len: 1.05, droop: 0.4, r: 0.068 },
+    { y: 2.08, count: 6, len: 0.85, droop: 0.38, r: 0.06 },
+    { y: 2.5, count: 5, len: 0.65, droop: 0.36, r: 0.05 },
+    { y: 2.88, count: 4, len: 0.45, droop: 0.34, r: 0.04 }
+  ]
+  for (const w of whorls) {
+    const yaw = rand() * Math.PI * 2
+    for (let b = 0; b < w.count; b++) {
+      const a = yaw + (b / w.count) * Math.PI * 2 + rand() * 0.5
+      const len = w.len * (0.85 + rand() * 0.3)
+      addBranch(w.y, a, len, w.droop * (0.8 + rand() * 0.4), w.r, b % 2 === 0)
     }
   }
-  const tip = new THREE.ConeGeometry(0.2, 0.8, 6)
-  tip.translate(0, 2.9, 0)
+
+  const tip = makeLoft([
+    { x: 0, cy: 0, ry: 0.09, rz: 0.09 },
+    { x: 0.5, cy: 0, ry: 0.05, rz: 0.05 },
+    { x: 0.85, cy: 0, ry: 0.015, rz: 0.015 }
+  ], 5)
+  tip.rotateZ(-Math.PI / 2)
+  tip.translate(0, 3.1, 0)
   needles.push(tip)
-  const tipSnow = new THREE.ConeGeometry(0.15, 0.35, 6)
-  tipSnow.translate(0, 3.22, 0)
+  const tipSnow = makeLoft([
+    { x: 0, cy: 0.045, ry: 0.06, rz: 0.06 },
+    { x: 0.4, cy: 0.04, ry: 0.035, rz: 0.035 },
+    { x: 0.7, cy: 0.03, ry: 0.012, rz: 0.012 }
+  ], 5)
+  tipSnow.rotateZ(-Math.PI / 2)
+  tipSnow.translate(0, 3.05, 0)
   snow.push(tipSnow)
+
   return {
     wood: mergeGeometries(wood, false),
     needles: mergeGeometries(needles, false),
@@ -820,7 +855,7 @@ function buildPineGeos(rand) {
 // ---------- scene ----------
 
 export function useArcticScene(containerRef) {
-  let renderer, scene, camera, orbit, frame
+  let renderer, scene, camera, orbit, frame, stopCameraMove
   let disposed = false
   const autoRotate = ref(true)
   const texAssets = []
@@ -934,6 +969,7 @@ export function useArcticScene(containerRef) {
     orbit.maxDistance = 220
     orbit.maxPolarAngle = Math.PI / 2.08
     orbit.autoRotateSpeed = 0.12
+    stopCameraMove = useCameraMove(camera, orbit, 20)
 
     // ---- lights ----
     const moonDir = new THREE.Vector3(-0.55, 0.62, -0.56).normalize()
@@ -1735,6 +1771,7 @@ export function useArcticScene(containerRef) {
     cancelAnimationFrame(frame)
     dispose.onCleanup?.()
     if (!scene) return
+    stopCameraMove?.()
     orbit?.dispose()
     scene.traverse((obj) => {
       if (obj.geometry) obj.geometry.dispose()

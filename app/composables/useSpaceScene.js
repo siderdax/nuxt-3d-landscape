@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { useCameraMove } from './useCameraMove'
 
 const PLANET_POS = new THREE.Vector3(-8, 0, -6)
 const PLANET_R = 26
@@ -742,7 +743,7 @@ function buildOutpost(track) {
 // ---------- scene ----------
 
 export function useSpaceScene(containerRef) {
-  let renderer, scene, camera, orbit, frame
+  let renderer, scene, camera, orbit, frame, stopCameraMove
   let disposed = false
   const autoRotate = ref(true)
   const texAssets = []
@@ -775,6 +776,7 @@ export function useSpaceScene(containerRef) {
     orbit.minDistance = 12
     orbit.maxDistance = 300
     orbit.autoRotateSpeed = 0.12
+    stopCameraMove = useCameraMove(camera, orbit, 50)
 
     scene.add(new THREE.AmbientLight(0x1c2a3a, 0.8))
     const sunLight = new THREE.DirectionalLight(0xffeedd, 1.25)
@@ -1229,6 +1231,7 @@ export function useSpaceScene(containerRef) {
     cancelAnimationFrame(frame)
     dispose.onCleanup?.()
     if (!scene) return
+    stopCameraMove?.()
     orbit?.dispose()
     scene.traverse((obj) => {
       if (obj.geometry) obj.geometry.dispose()

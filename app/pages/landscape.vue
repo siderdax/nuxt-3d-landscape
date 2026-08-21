@@ -4,7 +4,8 @@
       <h1 class="title">3D Landscape</h1>
       <p class="subtitle">
         <span class="icon">🖱</span> Drag to rotate &nbsp;·&nbsp;
-        <span class="icon">🔍</span> Scroll to zoom
+        <span class="icon">🔍</span> Scroll to zoom &nbsp;·&nbsp;
+        <span class="icon">⌨️</span> WASD / Arrows to move
       </p>
       <button class="rotate-btn" @click="toggleAutoRotate">
         <span class="icon">{{ autoRotate ? '⏸' : '▶' }}</span>

@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { useCameraMove } from './useCameraMove'
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 const MAP = 160
@@ -1049,7 +1050,7 @@ function makeTruck(wheelGeo, wheelMat) {
 // ---------- scene ----------
 
 export function useCityScene(containerRef) {
-  let renderer, scene, camera, orbit, frame
+  let renderer, scene, camera, orbit, frame, stopCameraMove
   let disposed = false
   const autoRotate = ref(true)
   const texAssets = []
@@ -1096,6 +1097,7 @@ export function useCityScene(containerRef) {
     orbit.maxDistance = 280
     orbit.maxPolarAngle = Math.PI / 2.06
     orbit.autoRotateSpeed = 0.12
+    stopCameraMove = useCameraMove(camera, orbit, 30)
 
     // ---- lights ----
     scene.add(new THREE.AmbientLight(0x334466, 0.85))
@@ -2277,6 +2279,7 @@ export function useCityScene(containerRef) {
     cancelAnimationFrame(frame)
     dispose.onCleanup?.()
     if (!scene) return
+    stopCameraMove?.()
     orbit?.dispose()
     scene.traverse((obj) => {
       if (obj.geometry) obj.geometry.dispose()
