@@ -310,6 +310,16 @@ function makeFawnTexture() {
   }, 1)
 }
 
+// squirrel coat: warm rust base with mottled undertone and fine grain
+function makeSquirrelFurTexture() {
+  return makeTileTexture(256, (ctx, size) => {
+    ctx.fillStyle = '#a5622f'
+    ctx.fillRect(0, 0, size, size)
+    tileBlobs(ctx, size, 50, 5, 13, ['rgba(122,72,36,0.35)', 'rgba(190,140,90,0.25)'])
+    tileSpeckle(ctx, size, 650, ['rgba(58,34,16,0.16)', 'rgba(232,204,166,0.10)'], 1, 2.2)
+  }, 1)
+}
+
 // log end rings
 function makeRingsTexture() {
   return makeTileTexture(128, (ctx, size) => {
@@ -1945,49 +1955,172 @@ export function useScene(containerRef) {
 
   function createSquirrels() {
     for (let i = 0; i < 2; i++) {
+      const furTex = makeSquirrelFurTexture()
+      texAssets.push(furTex)
       const bodyMat = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(0xb5651d).multiplyScalar(0.9 + Math.random() * 0.2),
-        roughness: 0.85,
+        map: furTex,
+        color: new THREE.Color(0xffffff).multiplyScalar(0.92 + Math.random() * 0.16),
+        roughness: 0.82,
       })
-      const darkMat = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.9 })
-      const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.3 })
+      const bellyMat = new THREE.MeshStandardMaterial({ color: 0xe9dcc4, roughness: 0.85 })
+      const darkMat = new THREE.MeshStandardMaterial({ color: 0x5c3d22, roughness: 0.85 })
+      const noseMat = new THREE.MeshStandardMaterial({ color: 0x241812, roughness: 0.5 })
+      const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1208, roughness: 0.25 })
+      const shineMat = new THREE.MeshBasicMaterial({ color: 0xfff6e0 })
+      const whiskerMat = new THREE.MeshStandardMaterial({ color: 0xe8ddc8, roughness: 0.6 })
 
       const sq = new THREE.Group()
+      const legs = []
 
-      // Body: single loft — rump -> arched back -> head -> snout
+      // Body: hunched rump -> arched back -> shoulders (head is a separate
+      // sculpted piece attached at the neck, not swept into the same loft)
       const body = new THREE.Mesh(makeLoft([
-        { x: -0.3, cy: 0.42, ry: 0.22, rz: 0.2 },
-        { x: -0.1, cy: 0.5, ry: 0.26, rz: 0.22 },
-        { x: 0.12, cy: 0.58, ry: 0.22, rz: 0.2 },
-        { x: 0.32, cy: 0.66, ry: 0.16, rz: 0.15 },
-        { x: 0.45, cy: 0.7, ry: 0.14, rz: 0.13 },
-        { x: 0.58, cy: 0.64, ry: 0.09, rz: 0.1 }
-      ], 10), bodyMat)
+        { x: -0.36, cy: 0.40, ry: 0.19, rz: 0.185 },
+        { x: -0.20, cy: 0.47, ry: 0.235, rz: 0.22 },
+        { x: -0.02, cy: 0.53, ry: 0.245, rz: 0.225 },
+        { x: 0.16, cy: 0.565, ry: 0.215, rz: 0.195 },
+        { x: 0.30, cy: 0.575, ry: 0.165, rz: 0.15 },
+        { x: 0.40, cy: 0.565, ry: 0.125, rz: 0.115 }
+      ], 12), bodyMat)
       sq.add(body)
 
-      const earGeo = new THREE.ConeGeometry(0.05, 0.14, 5)
-      const earL = new THREE.Mesh(earGeo, darkMat)
-      earL.position.set(0.4, 0.84, 0.09)
-      earL.rotation.z = -0.25
+      // cream belly patch riding the underside from haunch to chest
+      const belly = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8, 0, Math.PI * 2, Math.PI * 0.55, Math.PI * 0.45), bellyMat)
+      belly.scale.set(1.55, 0.7, 0.85)
+      belly.rotation.z = Math.PI
+      belly.position.set(0.0, 0.44, 0)
+      sq.add(belly)
+
+      // Head: rounded skull with cheek bulges tapering to a short snout,
+      // built in its own local space and tilted up off the neck (alert pose)
+      const headPivot = new THREE.Group()
+      headPivot.position.set(0.40, 0.575, 0)
+      headPivot.rotation.z = -0.18
+      const head = new THREE.Mesh(makeLoft([
+        { x: 0.00, cy: 0.00, ry: 0.125, rz: 0.115 },
+        { x: 0.09, cy: 0.02, ry: 0.155, rz: 0.15 },
+        { x: 0.20, cy: 0.03, ry: 0.145, rz: 0.14 },
+        { x: 0.31, cy: 0.015, ry: 0.10, rz: 0.10 },
+        { x: 0.40, cy: -0.01, ry: 0.058, rz: 0.062 }
+      ], 12), bodyMat)
+      headPivot.add(head)
+
+      const earGeo = new THREE.ConeGeometry(0.065, 0.16, 7)
+      const earInnerGeo = new THREE.ConeGeometry(0.036, 0.09, 6)
+      const earL = new THREE.Mesh(earGeo, bodyMat)
+      earL.position.set(0.155, 0.185, 0.095)
+      earL.rotation.set(0.1, 0, -0.28)
+      const earInnerL = new THREE.Mesh(earInnerGeo, darkMat)
+      earInnerL.position.set(0.16, 0.175, 0.10)
+      earInnerL.rotation.set(0.1, 0, -0.28)
       const earR = earL.clone()
-      earR.position.z = -0.09
-      earR.rotation.z = 0.25
-      sq.add(earL, earR)
+      earR.position.z = -0.095
+      earR.rotation.z = 0.28
+      const earInnerR = earInnerL.clone()
+      earInnerR.position.z = -0.10
+      earInnerR.rotation.z = 0.28
+      headPivot.add(earL, earR, earInnerL, earInnerR)
 
-      const eyeGeo = new THREE.SphereGeometry(0.03, 6, 4)
+      const eyeGeo = new THREE.SphereGeometry(0.034, 10, 8)
       const eyeL = new THREE.Mesh(eyeGeo, eyeMat)
-      eyeL.position.set(0.47, 0.76, 0.11)
+      eyeL.position.set(0.255, 0.075, 0.115)
       const eyeR = new THREE.Mesh(eyeGeo, eyeMat)
-      eyeR.position.set(0.47, 0.76, -0.11)
-      sq.add(eyeL, eyeR)
+      eyeR.position.set(0.255, 0.075, -0.115)
+      const shineGeo = new THREE.SphereGeometry(0.010, 6, 5)
+      const shineL = new THREE.Mesh(shineGeo, shineMat)
+      shineL.position.set(0.267, 0.086, 0.128)
+      const shineR = new THREE.Mesh(shineGeo, shineMat)
+      shineR.position.set(0.267, 0.086, -0.128)
+      headPivot.add(eyeL, eyeR, shineL, shineR)
 
-      // Fluffy tail: one loft curving up and back over the rump
-      const tail = new THREE.Mesh(makeLoft([
-        { x: -0.35, cy: 0.5, ry: 0.16, rz: 0.14 },
-        { x: -0.5, cy: 0.66, ry: 0.18, rz: 0.16 },
-        { x: -0.54, cy: 0.86, ry: 0.15, rz: 0.13 },
-        { x: -0.46, cy: 1.02, ry: 0.1, rz: 0.09 }
-      ], 10), darkMat)
+      const nose = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 6), noseMat)
+      nose.scale.set(1.1, 0.85, 0.95)
+      nose.position.set(0.415, -0.012, 0)
+      headPivot.add(nose)
+
+      // whiskers: thin tapered fins fanned from the snout
+      const whiskerGeo = new THREE.ConeGeometry(0.004, 0.20, 3)
+      for (const side of [1, -1]) {
+        for (let w = 0; w < 3; w++) {
+          const wh = new THREE.Mesh(whiskerGeo, whiskerMat)
+          wh.position.set(0.37, -0.01 + w * 0.018, side * 0.05)
+          wh.rotation.z = side * (Math.PI / 2 - 0.15)
+          wh.rotation.y = (w - 1) * 0.35
+          headPivot.add(wh)
+        }
+      }
+      sq.add(headPivot)
+
+      // Front paws tucked near the chest: short lofted forelegs
+      const frontLegGeo = makeLoft([
+        { x: 0, cy: 0, ry: 0.050, rz: 0.045 },
+        { x: 0.20, cy: 0, ry: 0.036, rz: 0.033 },
+        { x: 0.34, cy: 0, ry: 0.028, rz: 0.030 },
+        { x: 0.42, cy: 0, ry: 0.032, rz: 0.038 }
+      ], 8)
+      frontLegGeo.rotateZ(-Math.PI / 2)
+      const pawGeo = new THREE.SphereGeometry(0.036, 8, 6)
+      for (const sz of [1, -1]) {
+        const pivot = new THREE.Group()
+        pivot.position.set(0.28, 0.48, sz * 0.14)
+        const leg = new THREE.Mesh(frontLegGeo, bodyMat)
+        pivot.add(leg)
+        const paw = new THREE.Mesh(pawGeo, darkMat)
+        paw.scale.set(1, 0.65, 1.1)
+        paw.position.set(0, -0.42, 0)
+        pivot.add(paw)
+        sq.add(pivot)
+        pivot.userData = { name: 'front', side: sz }
+        legs.push(pivot)
+      }
+
+      // Hind legs: thicker, powerful haunches for the bounding gait
+      const hindLegGeo = makeLoft([
+        { x: 0, cy: 0, ry: 0.078, rz: 0.072 },
+        { x: 0.17, cy: 0, ry: 0.058, rz: 0.052 },
+        { x: 0.30, cy: 0, ry: 0.042, rz: 0.046 },
+        { x: 0.40, cy: 0, ry: 0.050, rz: 0.058 }
+      ], 8)
+      hindLegGeo.rotateZ(-Math.PI / 2)
+      const hindPawGeo = new THREE.SphereGeometry(0.048, 8, 6)
+      for (const sz of [1, -1]) {
+        const pivot = new THREE.Group()
+        pivot.position.set(-0.24, 0.44, sz * 0.16)
+        const leg = new THREE.Mesh(hindLegGeo, bodyMat)
+        pivot.add(leg)
+        const paw = new THREE.Mesh(hindPawGeo, darkMat)
+        paw.scale.set(1.2, 0.6, 1)
+        paw.position.set(0.02, -0.40, 0)
+        pivot.add(paw)
+        sq.add(pivot)
+        pivot.userData = { name: 'hind', side: sz }
+        legs.push(pivot)
+      }
+
+      // Bushy tail: three overlapping lofted plumes fanned side by side,
+      // arched up and forward over the back, dark-tipped
+      const tail = new THREE.Group()
+      const tailCurve = (scale) => makeLoft([
+        { x: 0.00, cy: 0.00, ry: 0.135 * scale, rz: 0.125 * scale },
+        { x: -0.16, cy: 0.12, ry: 0.175 * scale, rz: 0.155 * scale },
+        { x: -0.30, cy: 0.32, ry: 0.19 * scale, rz: 0.165 * scale },
+        { x: -0.38, cy: 0.54, ry: 0.17 * scale, rz: 0.145 * scale },
+        { x: -0.38, cy: 0.74, ry: 0.125 * scale, rz: 0.105 * scale },
+        { x: -0.30, cy: 0.90, ry: 0.070 * scale, rz: 0.060 * scale },
+        { x: -0.20, cy: 0.99, ry: 0.026 * scale, rz: 0.024 * scale }
+      ], 10)
+      const tailMain = new THREE.Mesh(tailCurve(1), bodyMat)
+      const tailL = new THREE.Mesh(tailCurve(0.82), bodyMat)
+      tailL.position.z = 0.055
+      tailL.rotation.y = 0.05
+      const tailR = new THREE.Mesh(tailCurve(0.82), bodyMat)
+      tailR.position.z = -0.055
+      tailR.rotation.y = -0.05
+      const tailTip = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), darkMat)
+      tailTip.position.set(-0.20, 0.99, 0)
+      tail.add(tailL, tailR, tailMain, tailTip)
+      tail.position.set(-0.36, 0.46, 0)
+      tail.rotation.z = 0.30
       sq.add(tail)
 
       sq.traverse(c => { if (c.isMesh) { c.castShadow = true } })
@@ -2005,6 +2138,7 @@ export function useScene(containerRef) {
       squirrels.push({
         group: sq,
         tail,
+        legs,
         pos: new THREE.Vector3(x, h, z),
         target: new THREE.Vector3(),
         state: 'pausing',
@@ -2032,6 +2166,7 @@ export function useScene(containerRef) {
       if (sq.state === 'pausing') {
         sq.timer -= delta
         sq.tail.rotation.y = Math.sin(elapsed * 2 + i) * 0.2
+        sq.legs.forEach(leg => { leg.rotation.x *= 0.85 })
         sq.group.position.y += (sq.pos.y - sq.group.position.y) * 0.2
         if (sq.timer <= 0) {
           sq.state = 'dashing'
@@ -2067,6 +2202,15 @@ export function useScene(containerRef) {
             while (rotDiff > Math.PI) rotDiff -= Math.PI * 2
             while (rotDiff < -Math.PI) rotDiff += Math.PI * 2
             sq.group.rotation.y += rotDiff * 8 * delta
+
+            // bounding gait: fronts and hinds swing in opposing pairs,
+            // synced to the same hop frequency as the body bounce
+            const gaitPhase = elapsed * 14 + i
+            const frontSwing = Math.sin(gaitPhase) * 0.5
+            const hindSwing = Math.sin(gaitPhase + Math.PI) * 0.6
+            sq.legs.forEach(leg => {
+              leg.rotation.x = leg.userData.name === 'front' ? frontSwing : hindSwing
+            })
 
             sq.tail.rotation.y = Math.sin(elapsed * 10 + i) * 0.4
           }

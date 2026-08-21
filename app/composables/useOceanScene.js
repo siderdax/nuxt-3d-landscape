@@ -1235,7 +1235,124 @@ function makeLighthouse(texAssets) {
 
 // ---------- animals ----------
 
-// ---------- sea turtle (detailed) ----------
+// ---------- polygon toolkit (turtle body parts) ----------
+
+// Incremental indexed-mesh builder. Every turtle part is emitted as one or
+// more parametric vertex grids (i = around, j = along) plus fan caps.
+function surf() {
+  const pos = []
+  const uv = []
+  const idx = []
+  const B = {
+    vertex(x, y, z, u, v) {
+      pos.push(x, y, z)
+      uv.push(u, v)
+      return pos.length / 3 - 1
+    },
+    tri(a, b, c) {
+      idx.push(a, b, c)
+    },
+    // fn(i, j) -> { x, y, z, u, v } over a (nu+1) x (nv+1) grid.
+    // rev flips winding for parameterisations that wind the other way.
+    grid(nu, nv, fn, rev) {
+      const base = pos.length / 3
+      for (let j = 0; j <= nv; j++) {
+        for (let i = 0; i <= nu; i++) {
+          const p = fn(i, j)
+          B.vertex(p.x, p.y, p.z, p.u, p.v)
+        }
+      }
+      const w = nu + 1
+      for (let j = 0; j < nv; j++) {
+        for (let i = 0; i < nu; i++) {
+          const a = base + j * w + i
+          const b = a + 1
+          const c = a + w + 1
+          const d = a + w
+          if (rev) idx.push(a, b, c, a, c, d)
+          else idx.push(a, d, c, a, c, b)
+        }
+      }
+      return base
+    },
+    // closes a ring of the last grid with a triangle fan
+    fan(ring, nu, cx, cy, cz, uu, vv, rev) {
+      const c = B.vertex(cx, cy, cz, uu, vv)
+      for (let i = 0; i < nu; i++) {
+        if (rev) idx.push(c, ring + i + 1, ring + i)
+        else idx.push(c, ring + i, ring + i + 1)
+      }
+    },
+    geometry() {
+      const geo = new THREE.BufferGeometry()
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
+      geo.setIndex(idx)
+      geo.computeVertexNormals()
+      return geo
+    }
+  }
+  return B
+}
+
+// Catmull-Rom through control values, t in [0,1] over the whole list.
+function crv(arr, t) {
+  const n = arr.length
+  if (n === 1) return arr[0]
+  const x = Math.min(n - 1.0001, Math.max(0, t)) * (n - 1)
+  const i = Math.floor(x)
+  const f = x - i
+  const p0 = arr[Math.max(0, i - 1)]
+  const p1 = arr[i]
+  const p2 = arr[Math.min(n - 1, i + 1)]
+  const p3 = arr[Math.min(n - 1, i + 2)]
+  return 0.5 * (2 * p1 + (p2 - p0) * f
+    + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f * f
+    + (3 * p1 - 3 * p2 + p3 - p0) * f * f * f)
+}
+
+// Lofts smoothly interpolated cross-sections along +z into a capped solid.
+// keys: { z, cx, cy, rx, ry, rd (lower radius), n (superellipse exponent) }
+// warp(section, angle, t) may perturb the ring radius (skin folds, scutes).
+function makeLoftZ(keys, seg, steps, warp) {
+  const f = (k) => keys.map((s) => (s[k] !== undefined ? s[k] : null))
+  const kz = f('z'), kcx = f('cx'), kcy = f('cy')
+  const krx = f('rx'), kry = f('ry'), krd = f('rd'), kn = f('n')
+  const at = (t) => ({
+    z: crv(kz, t),
+    cx: kcx[0] === null ? 0 : crv(kcx, t),
+    cy: kcy[0] === null ? 0 : crv(kcy, t),
+    rx: crv(krx, t),
+    ry: crv(kry, t),
+    rd: krd[0] === null ? crv(kry, t) : crv(krd, t),
+    n: kn[0] === null ? 2 : crv(kn, t)
+  })
+  const ring = (s, a, t) => {
+    const cu = Math.cos(a), su = Math.sin(a)
+    const p = 2 / s.n
+    const fx = Math.sign(cu) * Math.pow(Math.abs(cu), p)
+    const fy = Math.sign(su) * Math.pow(Math.abs(su), p)
+    const k = warp ? warp(s, a, t) : 1
+    return {
+      x: s.cx + s.rx * fx * k,
+      y: s.cy + (su >= 0 ? s.ry : s.rd) * fy * k
+    }
+  }
+  const B = surf()
+  const base = B.grid(seg, steps, (i, j) => {
+    const t = j / steps
+    const s = at(t)
+    const a = (i / seg) * Math.PI * 2
+    const q = ring(s, a, t)
+    return { x: q.x, y: q.y, z: s.z, u: i / seg, v: t }
+  }, true)
+  const s0 = at(0), s1 = at(1)
+  B.fan(base, seg, s0.cx, s0.cy, s0.z, 0.5, 0, true)
+  B.fan(base + (seg + 1) * steps, seg, s1.cx, s1.cy, s1.z, 0.5, 1, false)
+  return B.geometry()
+}
+
+// ---------- sea turtle ----------
 
 function sstep(a, b, x) {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)))
@@ -1363,6 +1480,27 @@ function makeSkinCanvas() {
     ctx.fillStyle = g
     ctx.fillRect(x - r, y - r, r * 2, r * 2)
   }
+  // polygonal skin scales: seeded cells with dark seams
+  for (let i = 0; i < 260; i++) {
+    const x = Math.random() * W, y = Math.random() * H
+    const r = 7 + Math.random() * 13
+    const n = 5 + Math.floor(Math.random() * 2)
+    const rot = Math.random() * Math.PI
+    ctx.beginPath()
+    for (let k = 0; k <= n; k++) {
+      const a = rot + (k / n) * Math.PI * 2
+      const rr = r * (0.78 + Math.random() * 0.3)
+      const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr
+      if (k === 0) ctx.moveTo(px, py)
+      else ctx.lineTo(px, py)
+    }
+    ctx.closePath()
+    ctx.fillStyle = `rgba(${140 + Math.random() * 40 | 0},${146 + Math.random() * 34 | 0},${92 + Math.random() * 28 | 0},0.16)`
+    ctx.fill()
+    ctx.strokeStyle = `rgba(44,56,28,${0.16 + Math.random() * 0.16})`
+    ctx.lineWidth = 1.2
+    ctx.stroke()
+  }
   for (let i = 0; i < 5200; i++) {
     const s = 0.6 + Math.random() * 1.6
     ctx.fillStyle = `rgba(40,52,26,${0.08 + Math.random() * 0.16})`
@@ -1433,27 +1571,253 @@ function makePlastronCanvas() {
   return c
 }
 
-function makeFlipperGeometry(len, chord, thick) {
-  const s = new THREE.Shape()
-  const cR = chord * 0.40, cF = chord * 0.60
-  s.moveTo(0, -cR)
-  s.quadraticCurveTo(len * 0.34, -cR * 1.25, len * 0.62, -chord * 0.42)
-  s.quadraticCurveTo(len * 0.90, -chord * 0.30, len * 0.99, -chord * 0.05)
-  s.quadraticCurveTo(len * 1.03, chord * 0.10, len * 0.93, chord * 0.18)
-  s.quadraticCurveTo(len * 0.68, chord * 0.42, len * 0.40, chord * 0.55)
-  s.quadraticCurveTo(len * 0.16, cF * 1.05, 0, cF)
-  s.closePath()
-  const geo = new THREE.ExtrudeGeometry(s, {
-    depth: thick, bevelEnabled: true, bevelThickness: thick * 0.6, bevelSize: thick * 0.5, bevelSegments: 2, curveSegments: 10
-  })
-  geo.rotateX(Math.PI / 2)
-  const p = geo.attributes.position
-  for (let i = 0; i < p.count; i++) {
-    const f = 1 - 0.5 * Math.max(0, p.getX(i) / len)
-    p.setY(i, p.getY(i) * f)
+const SHELL_X = 1.06
+const SHELL_Z = 1.34
+const SHELL_Y = 0.42
+const SKIRT_DROP = 0.27
+
+// Top-down carapace outline (a = 0 at the head): broad over the shoulders,
+// tapering to a pointed posterior, notched where the neck emerges, and
+// scalloped once per marginal scute.
+function carapaceOutline(a) {
+  const cz = Math.cos(a), sx = Math.sin(a)
+  const rear = sstep(0.05, 1.0, -cz)
+  const front = sstep(0.35, 1.0, cz)
+  const w = 1 - 0.44 * rear * rear - 0.13 * front * front
+  let d = 1 + 0.05 * rear
+  const da = Math.min(a, Math.PI * 2 - a)
+  d -= 0.17 * Math.exp(-(da * da) / 0.05)
+  const scallop = 1 + 0.009 * Math.cos(a * 24)
+  return { x: sx * w * scallop, z: cz * d * scallop }
+}
+
+// Dome cross-profile: flat-ish crown rolling over into a steep margin.
+function carapaceDome(s) {
+  return Math.pow(Math.max(0, 1 - s * s), 0.58)
+}
+
+// One sculpted carapace: the domed disc plus the marginal skirt that curls
+// down past the plastron, with per-scute relief pushed along the normals.
+function makeCarapace() {
+  const NA = 132, JD = 26, NV = 34
+  const point = (i, j) => {
+    const a = (i / NA) * Math.PI * 2
+    const o = carapaceOutline(a)
+    const m = Math.hypot(o.x, o.z) || 1
+    let s, r, y
+    if (j <= JD) {
+      s = j / JD
+      r = 1
+      y = SHELL_Y * carapaceDome(s)
+      // vertebral keel along the spine
+      y += 0.016 * Math.exp(-((o.x * s) * (o.x * s)) / 0.02) * (1 - s * s)
+    } else {
+      const f = (j - JD) / (NV - JD)
+      s = 1
+      r = 1 + 0.026 * Math.sin(f * Math.PI) - 0.05 * f * f * f
+      y = -SKIRT_DROP * Math.sin(f * Math.PI * 0.62)
+    }
+    const tx = (o.x / m) * s
+    const tz = (o.z / m) * s
+    return {
+      x: o.x * s * r * SHELL_X,
+      y,
+      z: o.z * s * r * SHELL_Z,
+      u: 0.25 + i / NA,
+      v: 1 - Math.asin(Math.min(1, s)) * (2 / Math.PI),
+      tx,
+      tz,
+      s
+    }
   }
-  geo.computeVertexNormals()
-  return geo
+
+  const B = surf()
+  const relief = []
+  B.grid(NA, NV, (i, j) => {
+    const p = point(i, j)
+    const sc = carapaceAt(p.tx, p.tz, p.s)
+    // relief eases out at the dome apex, over the shoulder into the margin and
+    // down the skirt, where a full-depth seam would cut the edge into teeth
+    const fade = sstep(0, 0.12, p.s) * (1 - 0.72 * sstep(0.80, 1.0, p.s))
+      * (j <= JD ? 1 : 1 - 0.6 * ((j - JD) / (NV - JD)))
+    relief.push((0.026 * sc.plate - 0.030 * sc.groove) * fade)
+    return p
+  }, false)
+  const outer = B.geometry()
+  {
+    const pos = outer.attributes.position
+    const nrm = outer.attributes.normal
+    for (let k = 0; k < relief.length; k++) {
+      const d = relief[k]
+      pos.setXYZ(k,
+        pos.getX(k) + nrm.getX(k) * d,
+        pos.getY(k) + nrm.getY(k) * d,
+        pos.getZ(k) + nrm.getZ(k) * d)
+    }
+    outer.computeVertexNormals()
+  }
+
+  // shell interior: the same surface pulled inward, wound inside-out, with a
+  // rim band closing the free edge of the marginals
+  const Bi = surf()
+  const inner = (i, j) => {
+    const p = point(i, j)
+    return { x: p.x * 0.972, y: p.y * 0.80 - 0.012, z: p.z * 0.972, u: p.u, v: p.v }
+  }
+  const ib = Bi.grid(NA, NV, inner, true)
+  const rimBase = Bi.grid(NA, 1, (i, j) => (j === 0 ? point(i, NV) : inner(i, NV)), true)
+  void ib
+  void rimBase
+  const liner = Bi.geometry()
+
+  const at = (a, s) => {
+    const o = carapaceOutline(a)
+    return new THREE.Vector3(o.x * s * SHELL_X, SHELL_Y * carapaceDome(s), o.z * s * SHELL_Z)
+  }
+  return { outer, liner, at }
+}
+
+// Plastron outline: waisted at the bridge, notched front (neck) and rear (tail).
+function plastronOutline(a) {
+  const cz = Math.cos(a), sx = Math.sin(a)
+  const waist = 1 - 0.26 * Math.exp(-(cz * cz) / 0.11)
+  const rear = sstep(0.05, 1.0, -cz)
+  const w = (1 - 0.32 * rear * rear) * waist
+  let d = 1
+  const df = Math.min(a, Math.PI * 2 - a)
+  d -= 0.13 * Math.exp(-(df * df) / 0.04)
+  const dr = Math.abs(a - Math.PI)
+  d -= 0.15 * Math.exp(-(dr * dr) / 0.05)
+  return { x: sx * w, z: cz * d }
+}
+
+const PLAS_X = 0.80
+const PLAS_Z = 1.06
+const PLAS_Y = -0.16
+const PLAS_DEPTH = 0.13
+
+function plastronPoint(a, s) {
+  const o = plastronOutline(a)
+  return {
+    x: o.x * s * PLAS_X,
+    y: PLAS_Y - PLAS_DEPTH * Math.pow(Math.max(0, 1 - s * s), 0.8),
+    z: o.z * s * PLAS_Z
+  }
+}
+
+// Plastron as a closed slab: convex underside + flat inner deck.
+function makePlastron() {
+  const NA = 96, NS = 16
+  const B = surf()
+  B.grid(NA, NS, (i, j) => {
+    const a = (i / NA) * Math.PI * 2
+    const s = j / NS
+    const p = plastronPoint(a, s)
+    return { ...p, u: i / NA, v: 1 - s }
+  }, true)
+  B.grid(NA, NS, (i, j) => {
+    const a = (i / NA) * Math.PI * 2
+    const s = j / NS
+    const p = plastronPoint(a, s)
+    return { x: p.x, y: PLAS_Y + 0.02 * (1 - s), z: p.z, u: i / NA, v: 1 - s }
+  }, false)
+  return B.geometry()
+}
+
+// Bridge: the wall of shell that joins plastron to carapace between the
+// limb openings. Fades to nothing at both ends of the sector.
+function makeBridge(a0, a1) {
+  const NA = 40, NV = 8
+  const B = surf()
+  B.grid(NA, NV, (i, j) => {
+    const t = i / NA
+    const a = a0 + (a1 - a0) * t
+    const fade = sstep(0, 0.22, t) * sstep(0, 0.22, 1 - t)
+    const o = carapaceOutline(a)
+    const top = {
+      x: o.x * (1 - 0.024) * SHELL_X,
+      y: -SKIRT_DROP * Math.sin(Math.PI * 0.62) + 0.01,
+      z: o.z * (1 - 0.024) * SHELL_Z
+    }
+    const bot = plastronPoint(a, 1)
+    const f = j / NV
+    const w = f * fade
+    // bow the wall outward so it reads as a rounded bridge, not a flat web
+    const bulge = 0.045 * Math.sin(f * Math.PI) * fade
+    const nx = Math.sin(a), nz = Math.cos(a)
+    return {
+      x: top.x + (bot.x - top.x) * w + nx * bulge,
+      y: top.y + (bot.y - top.y) * w,
+      z: top.z + (bot.z - top.z) * w + nz * bulge,
+      u: 0.25 + a / (Math.PI * 2),
+      v: 0.06 * (1 - f)
+    }
+  }, false)
+  return B.geometry()
+}
+
+// Flipper: a swept, cambered airfoil skinned over spanwise stations, with
+// digit ridges under the skin and a drooping, twisted tip.
+function makeFlipperGeometry(cfg) {
+  const { len, chord, thick, ch, le, th, droop, twist, digits } = cfg
+  const NS = 24, NC = 30
+  const shape = (cp) => 5 * (0.2969 * Math.sqrt(cp) - 0.126 * cp
+    - 0.3516 * cp * cp + 0.2843 * cp * cp * cp - 0.1015 * cp * cp * cp * cp)
+  const station = (r) => ({
+    x: r * len,
+    c: crv(ch, r) * chord,
+    zle: crv(le, r) * chord,
+    t: crv(th, r) * thick,
+    y: crv(droop, r) * len,
+    tw: crv(twist, r)
+  })
+  const point = (i, j) => {
+    const r = j / NS
+    const s = station(r)
+    const phi = (i / NC) * Math.PI * 2
+    const cp = (1 - Math.cos(phi)) / 2
+    const side = phi <= Math.PI ? 1 : -1
+    // digit ridges fan out across the chord over the mid-span
+    const ridge = 0.16 * Math.cos(cp * Math.PI * 2 * digits)
+      * sstep(0.12, 0.5, r) * (1 - sstep(0.78, 1, r)) * Math.sin(cp * Math.PI)
+    const half = s.t * shape(cp) * (1 + ridge)
+    const camber = 0.09 * s.c * cp * (1 - cp) * 4 * 0.25
+    // trailing edge scalloped between the digits
+    const te = 0.018 * s.c * Math.cos(cp * Math.PI * 2 * digits) * sstep(0.6, 1, cp)
+    let zz = s.zle - cp * (s.c + te)
+    let yy = camber + side * half
+    const ct = Math.cos(s.tw), st = Math.sin(s.tw)
+    const zr = zz * ct - yy * st
+    const yr = zz * st + yy * ct
+    return {
+      x: s.x,
+      y: s.y + yr,
+      z: zr,
+      u: i / NC,
+      v: r * 1.6
+    }
+  }
+  const B = surf()
+  const base = B.grid(NC, NS, point, false)
+  const s0 = station(0), s1 = station(1)
+  B.fan(base, NC, 0, s0.y, s0.zle - s0.c * 0.5, 0.5, 0, false)
+  B.fan(base + (NC + 1) * NS, NC, len, s1.y, s1.zle - s1.c * 0.5, 0.5, 1, true)
+  return B.geometry()
+}
+
+// Mirrors a part across the sagittal plane, restoring winding after the flip.
+function mirrorX(geo) {
+  const m = geo.clone()
+  m.scale(-1, 1, 1)
+  const idx = m.index.array
+  for (let i = 0; i < idx.length; i += 3) {
+    const t = idx[i + 1]
+    idx[i + 1] = idx[i + 2]
+    idx[i + 2] = t
+  }
+  m.index.needsUpdate = true
+  m.computeVertexNormals()
+  return m
 }
 
 function makeTurtle(texAssets) {
@@ -1468,204 +1832,272 @@ function makeTurtle(texAssets) {
   const shellMat = new THREE.MeshStandardMaterial({ map: shellTex, bumpMap: shellBump, bumpScale: 0.16, roughness: 0.74 })
   const skinMat = new THREE.MeshStandardMaterial({ map: skinTex, bumpMap: skinTex, bumpScale: 0.05, roughness: 0.68 })
   const plastronMat = new THREE.MeshStandardMaterial({ map: plastronTex, bumpMap: plastronTex, bumpScale: 0.09, roughness: 0.72 })
+  const hornMat = new THREE.MeshStandardMaterial({ color: 0x3b3524, roughness: 0.45 })
   const darkMat = new THREE.MeshStandardMaterial({ color: 0x22291c, roughness: 0.6 })
   const eyeMat = new THREE.MeshStandardMaterial({ color: 0x2a1d0a, roughness: 0.28, metalness: 0.15 })
   const shineMat = new THREE.MeshBasicMaterial({ color: 0xfff6dd })
+  const innerMat = new THREE.MeshStandardMaterial({ color: 0x2a2c1e, roughness: 0.9, side: THREE.DoubleSide })
 
-  // carapace: dense hemisphere + per-scute relief
-  const shellGeo = new THREE.SphereGeometry(1, 128, 48, 0, Math.PI * 2, 0, Math.PI / 2)
+  // ---- shell: carapace + interior liner + plastron + bridges ----
+  const car = makeCarapace()
+  g.add(new THREE.Mesh(car.outer, shellMat))
+  g.add(new THREE.Mesh(car.liner, innerMat))
+  g.add(new THREE.Mesh(makePlastron(), plastronMat))
+  g.add(new THREE.Mesh(makeBridge(0.62, 2.30), shellMat))
+  g.add(new THREE.Mesh(makeBridge(Math.PI + 0.62, Math.PI + 2.30), shellMat))
+
+  // weathering: barnacles + algae patches riding the sculpted shell surface
   {
-    const sp = shellGeo.attributes.position
-    for (let i = 0; i < sp.count; i++) {
-      let x = sp.getX(i), y = sp.getY(i), z = sp.getZ(i)
-      const len = Math.hypot(x, y, z)
-      x /= len
-      y /= len
-      z /= len
-      const st = Math.hypot(x, z)
-      const sc = carapaceAt(x, z, st)
-      let h = 0.05 * sc.plate
-      h -= 0.04 * sc.groove
-      h += 0.006 * Math.sin(x * 21 + 1.7) * Math.cos(z * 18 - 0.6)
-      sp.setXYZ(i, x * (1 + h), y * (1 + h * 1.25), z * (1 + h))
-    }
-    shellGeo.computeVertexNormals()
-    shellGeo.scale(1.05, 0.40, 1.32)
-  }
-  const shell = new THREE.Mesh(shellGeo, shellMat)
-  g.add(shell)
-
-  // plastron (lower shell, inset so the carapace overhangs)
-  const bellyGeo = new THREE.SphereGeometry(1, 64, 20, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2)
-  bellyGeo.scale(1.0, 0.30, 1.25)
-  const belly = new THREE.Mesh(bellyGeo, plastronMat)
-  belly.position.y = -0.02
-  g.add(belly)
-
-  // shell rim (visible edge where carapace meets plastron)
-  const rimMat = new THREE.MeshStandardMaterial({ color: 0x4a5238, roughness: 0.85 })
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.055, 10, 72), rimMat)
-  rim.rotation.x = 0
-  rim.scale.set(1.02, 0.30, 1.29)
-  rim.position.y = -0.01
-  g.add(rim)
-
-  // weathering: barnacles + algae patches on the carapace
-  {
-    const barnacleGeo = new THREE.SphereGeometry(0.024, 6, 5)
-    barnacleGeo.scale(1, 0.55, 1)
+    const barnacleGeo = makeLoftZ([
+      { z: 0, rx: 0.030, ry: 0.030 },
+      { z: 0.012, rx: 0.034, ry: 0.034 },
+      { z: 0.026, rx: 0.026, ry: 0.026 },
+      { z: 0.030, rx: 0.014, ry: 0.014 },
+      { z: 0.032, rx: 0.006, ry: 0.006 }
+    ], 9, 6)
+    barnacleGeo.rotateX(-Math.PI / 2)
     const barnacleMat = new THREE.MeshStandardMaterial({ color: 0xb5af9e, roughness: 0.95 })
-    for (let i = 0; i < 26; i++) {
-      const a = Math.random() * Math.PI * 2
-      const r = 0.12 + Math.random() * 0.62
-      const m = new THREE.Mesh(barnacleGeo, barnacleMat)
-      m.position.set(
-        Math.cos(a) * r * 1.05 * 1.02,
-        Math.sqrt(Math.max(0, 1 - r * r)) * 0.40 * 1.02,
-        Math.sin(a) * r * 1.32 * 1.02
-      )
-      m.scale.setScalar(0.45 + Math.random() * 1.1)
-      m.rotation.set(Math.random(), Math.random() * Math.PI, Math.random())
-      g.add(m)
-    }
     const algaeGeo = new THREE.CircleGeometry(0.1, 10)
     const algaeMat = new THREE.MeshStandardMaterial({ color: 0x39512e, roughness: 0.95 })
+    const Y_AXIS = new THREE.Vector3(0, 1, 0)
     const Z_AXIS = new THREE.Vector3(0, 0, 1)
+    const nrm = (a, s) => {
+      const p = car.at(a, s)
+      const da = car.at(a + 0.02, s).sub(p)
+      const ds = car.at(a, Math.min(0.999, s + 0.02)).sub(p)
+      return ds.cross(da).normalize()
+    }
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * Math.PI * 2
+      const s = 0.15 + Math.random() * 0.72
+      const m = new THREE.Mesh(barnacleGeo, barnacleMat)
+      m.position.copy(car.at(a, s))
+      m.quaternion.setFromUnitVectors(Y_AXIS, nrm(a, s))
+      m.scale.set(0.5 + Math.random() * 1.1, 0.5 + Math.random() * 0.9, 0.5 + Math.random() * 1.1)
+      g.add(m)
+    }
     for (let i = 0; i < 9; i++) {
       const a = Math.random() * Math.PI * 2
-      const r = 0.18 + Math.random() * 0.55
-      const ux = Math.cos(a) * r
-      const uy = Math.sqrt(Math.max(0, 1 - r * r))
-      const uz = Math.sin(a) * r
-      // true normal of the oblate shell ellipsoid
-      const n = new THREE.Vector3(ux / 1.1025, uy / 0.16, uz / 1.7424).normalize()
+      const s = 0.2 + Math.random() * 0.65
       const m = new THREE.Mesh(algaeGeo, algaeMat)
-      m.position.set(ux * 1.05 * 1.01, uy * 0.40 * 1.01, uz * 1.32 * 1.01)
+      const n = nrm(a, s)
+      m.position.copy(car.at(a, s)).addScaledVector(n, 0.012)
       m.quaternion.setFromUnitVectors(Z_AXIS, n)
       m.scale.set(0.5 + Math.random() * 0.8, 0.35 + Math.random() * 0.6, 1)
       g.add(m)
     }
   }
 
-  // head (joint pivot) with curved tube neck
+  // ---- head (pivot at the base of the neck) ----
   const headPivot = new THREE.Group()
-  headPivot.position.set(0, 0.04, 1.38)
-  const neckCurve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(0, -0.06, -0.42),
-    new THREE.Vector3(0, -0.03, -0.20),
-    new THREE.Vector3(0, 0.0, 0.0),
-    new THREE.Vector3(0, 0.02, 0.08)
-  ])
-  const neckGeo = new THREE.TubeGeometry(neckCurve, 20, 0.13, 12)
-  {
-    const uvn = neckGeo.attributes.uv
-    const posn = neckGeo.attributes.position
-    for (let i = 0; i < posn.count; i++) {
-      const tt = uvn.getX(i)
-      const f = 1.15 - 0.4 * tt
-      const yc = -0.06 + tt * 0.08
-      posn.setX(i, posn.getX(i) * f)
-      posn.setY(i, yc + (posn.getY(i) - yc) * f * 0.75)
-    }
-    neckGeo.computeVertexNormals()
-  }
+  headPivot.position.set(0, 0.05, 1.22)
+
+  // neck: tapered column with skin folds, curving up to the skull
+  const neckGeo = makeLoftZ([
+    { z: -0.44, cy: -0.11, rx: 0.225, ry: 0.190, rd: 0.180, n: 2.3 },
+    { z: -0.32, cy: -0.09, rx: 0.208, ry: 0.178, rd: 0.168, n: 2.3 },
+    { z: -0.20, cy: -0.06, rx: 0.190, ry: 0.164, rd: 0.152, n: 2.2 },
+    { z: -0.08, cy: -0.025, rx: 0.175, ry: 0.154, rd: 0.142, n: 2.1 },
+    { z: 0.03, cy: 0.0, rx: 0.168, ry: 0.150, rd: 0.138, n: 2.1 }
+  ], 20, 26, (s, a, t) => 1 + 0.045 * Math.sin(t * 34) * (1 - t) - 0.02 * Math.cos(a * 7) * (1 - t))
   headPivot.add(new THREE.Mesh(neckGeo, skinMat))
-  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.21, 24, 16), skinMat)
-  skull.scale.set(0.95, 0.8, 1.32)
-  skull.position.set(0, 0.035, 0.14)
-  headPivot.add(skull)
-  const snout = new THREE.Mesh(new THREE.SphereGeometry(0.125, 20, 14), skinMat)
-  snout.scale.set(0.82, 0.6, 1.05)
-  snout.position.set(0, -0.012, 0.40)
-  headPivot.add(snout)
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.014, 0.30), darkMat)
-  mouth.position.set(0, -0.052, 0.38)
-  headPivot.add(mouth)
-  // lower jaw: body + beak-like edge + upturned tip
+
+  // skull: brow ridge, cheeks, and an upper beak hooking down at the tip
+  const skullGeo = makeLoftZ([
+    { z: 0.00, cy: 0.012, rx: 0.172, ry: 0.158, rd: 0.146, n: 2.1 },
+    { z: 0.08, cy: 0.032, rx: 0.198, ry: 0.180, rd: 0.152, n: 2.2 },
+    { z: 0.17, cy: 0.046, rx: 0.212, ry: 0.190, rd: 0.144, n: 2.4 },
+    { z: 0.26, cy: 0.048, rx: 0.206, ry: 0.180, rd: 0.128, n: 2.5 },
+    { z: 0.34, cy: 0.038, rx: 0.182, ry: 0.156, rd: 0.110, n: 2.5 },
+    { z: 0.42, cy: 0.020, rx: 0.148, ry: 0.126, rd: 0.092, n: 2.4 },
+    { z: 0.49, cy: -0.004, rx: 0.110, ry: 0.096, rd: 0.070, n: 2.3 },
+    { z: 0.55, cy: -0.032, rx: 0.070, ry: 0.062, rd: 0.048, n: 2.2 },
+    { z: 0.585, cy: -0.058, rx: 0.032, ry: 0.030, rd: 0.025, n: 2.2 }
+  ], 22, 40, (s, a, t) => {
+    // head scutes: seams across the crown, only on the upper half
+    const up = Math.max(0, Math.sin(a))
+    let seam = 0
+    for (const sz of [0.110, 0.265, 0.395]) {
+      const d = (s.z - sz) / 0.026
+      seam = Math.max(seam, Math.exp(-d * d))
+    }
+    const mid = Math.exp(-Math.pow((Math.abs(a - Math.PI / 2)) / 0.12, 2)) * sstep(0.36, 0.16, s.z)
+    return 1 - 0.028 * seam * up - 0.010 * mid
+  })
+  headPivot.add(new THREE.Mesh(skullGeo, skinMat))
+
+  // horny upper beak edge (tomium) riding the front of the snout
+  const beakGeo = makeLoftZ([
+    { z: 0.37, cy: -0.060, rx: 0.112, ry: 0.022, rd: 0.018, n: 3.2 },
+    { z: 0.44, cy: -0.064, rx: 0.100, ry: 0.022, rd: 0.018, n: 3.2 },
+    { z: 0.50, cy: -0.074, rx: 0.076, ry: 0.021, rd: 0.017, n: 3.0 },
+    { z: 0.556, cy: -0.090, rx: 0.046, ry: 0.019, rd: 0.015, n: 2.8 },
+    { z: 0.588, cy: -0.106, rx: 0.021, ry: 0.014, rd: 0.012, n: 2.6 }
+  ], 16, 16)
+  headPivot.add(new THREE.Mesh(beakGeo, hornMat))
+
+  // lower jaw: V-shaped ramus pair merged into one lofted piece
   const jawPivot = new THREE.Group()
-  jawPivot.position.set(0, -0.048, 0.28)
-  const jaw = new THREE.Mesh(new THREE.SphereGeometry(0.13, 18, 12), skinMat)
-  jaw.scale.set(0.8, 0.3, 0.95)
-  jaw.position.set(0, -0.028, 0.13)
-  jawPivot.add(jaw)
-  const jawEdge = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.012, 0.22), darkMat)
-  jawEdge.position.set(0, 0.012, 0.22)
-  jawPivot.add(jawEdge)
-  const jawTip = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), skinMat)
-  jawTip.scale.set(1.2, 0.6, 1.6)
-  jawTip.position.set(0, 0.005, 0.30)
-  jawPivot.add(jawTip)
+  jawPivot.position.set(0, -0.062, 0.24)
+  const jawGeo = makeLoftZ([
+    { z: -0.11, cy: 0.010, rx: 0.152, ry: 0.058, rd: 0.056, n: 2.6 },
+    { z: -0.02, cy: 0.006, rx: 0.148, ry: 0.056, rd: 0.054, n: 2.8 },
+    { z: 0.07, cy: 0.002, rx: 0.130, ry: 0.052, rd: 0.049, n: 3.0 },
+    { z: 0.15, cy: 0.000, rx: 0.104, ry: 0.047, rd: 0.044, n: 3.0 },
+    { z: 0.23, cy: 0.002, rx: 0.072, ry: 0.042, rd: 0.038, n: 2.8 },
+    { z: 0.28, cy: 0.008, rx: 0.044, ry: 0.035, rd: 0.031, n: 2.6 },
+    { z: 0.305, cy: 0.014, rx: 0.020, ry: 0.022, rd: 0.020, n: 2.5 }
+  ], 18, 20)
+  jawPivot.add(new THREE.Mesh(jawGeo, skinMat))
+  const jawEdgeGeo = makeLoftZ([
+    { z: 0.02, cy: 0.052, rx: 0.126, ry: 0.013, rd: 0.013, n: 3.2 },
+    { z: 0.12, cy: 0.048, rx: 0.100, ry: 0.013, rd: 0.013, n: 3.2 },
+    { z: 0.22, cy: 0.046, rx: 0.066, ry: 0.012, rd: 0.012, n: 3.0 },
+    { z: 0.30, cy: 0.050, rx: 0.027, ry: 0.011, rd: 0.011, n: 2.8 }
+  ], 14, 12)
+  jawPivot.add(new THREE.Mesh(jawEdgeGeo, hornMat))
   headPivot.add(jawPivot)
+
+  // mouth line kept dark so the jaws read as separate
+  const gapeGeo = makeLoftZ([
+    { z: 0.18, cy: -0.054, rx: 0.116, ry: 0.009, rd: 0.009, n: 3.4 },
+    { z: 0.33, cy: -0.060, rx: 0.096, ry: 0.009, rd: 0.009, n: 3.4 },
+    { z: 0.47, cy: -0.072, rx: 0.058, ry: 0.008, rd: 0.008, n: 3.0 },
+    { z: 0.565, cy: -0.094, rx: 0.023, ry: 0.007, rd: 0.007, n: 2.8 }
+  ], 12, 10)
+  headPivot.add(new THREE.Mesh(gapeGeo, darkMat))
+
   const irisMat = new THREE.MeshStandardMaterial({ color: 0xc8a020, roughness: 0.45, metalness: 0.2 })
+  const lidGeo = makeLoftZ([
+    { z: -0.030, rx: 0.032, ry: 0.032, n: 2 },
+    { z: 0.000, rx: 0.068, ry: 0.062, n: 2.4 },
+    { z: 0.022, rx: 0.062, ry: 0.056, n: 2.4 }
+  ], 16, 8)
   for (const side of [1, -1]) {
     const nostril = new THREE.Mesh(new THREE.SphereGeometry(0.017, 8, 6), darkMat)
-    nostril.position.set(side * 0.033, 0.02, 0.52)
+    nostril.position.set(side * 0.032, 0.012, 0.532)
     headPivot.add(nostril)
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.048, 16, 12), eyeMat)
-    eye.scale.set(1, 1.08, 0.95)
-    eye.position.set(side * 0.155, 0.08, 0.285)
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.054, 18, 14), eyeMat)
+    eye.position.set(side * 0.172, 0.086, 0.290)
     headPivot.add(eye)
-    const shine = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), shineMat)
-    shine.position.set(side * 0.17, 0.112, 0.33)
-    headPivot.add(shine)
-    // golden iris ring around the eye
-    const iris = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.009, 8, 24), irisMat)
-    iris.position.copy(eye.position)
-    iris.rotation.y = side * (Math.PI / 2 - 0.35)
-    iris.rotation.x = -0.15
+    // scaly lid ring seating the eye into the skull
+    const lid = new THREE.Mesh(lidGeo, skinMat)
+    lid.position.copy(eye.position)
+    lid.rotation.y = side * (Math.PI / 2 - 0.28)
+    lid.rotation.z = -0.12
+    headPivot.add(lid)
+    const iris = new THREE.Mesh(new THREE.TorusGeometry(0.054, 0.010, 8, 24), irisMat)
+    iris.position.copy(eye.position).addScaledVector(new THREE.Vector3(side * 0.94, 0.2, 0.28).normalize(), 0.004)
+    iris.rotation.y = side * (Math.PI / 2 - 0.28)
+    iris.rotation.x = -0.14
     headPivot.add(iris)
-    // auditory opening (oval pit behind the eye)
-    const pit = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), darkMat)
-    pit.scale.set(0.3, 1.0, 0.75)
-    pit.position.set(side * 0.168, 0.04, 0.16)
+    const shine = new THREE.Mesh(new THREE.SphereGeometry(0.013, 8, 6), shineMat)
+    shine.position.set(side * 0.190, 0.118, 0.330)
+    headPivot.add(shine)
+    // tympanic (ear) plate behind the eye
+    const pit = new THREE.Mesh(makeLoftZ([
+      { z: -0.012, rx: 0.020, ry: 0.038, n: 2.6 },
+      { z: 0.004, rx: 0.026, ry: 0.046, n: 2.6 },
+      { z: 0.014, rx: 0.020, ry: 0.038, n: 2.6 }
+    ], 14, 8), hornMat)
+    pit.position.set(side * 0.190, 0.036, 0.160)
+    pit.rotation.y = side * (Math.PI / 2 - 0.22)
     headPivot.add(pit)
   }
   g.add(headPivot)
 
-  // shoulder / hip joints (bulges blending flippers into the shell)
+  // ---- limb sockets: lofted stubs bridging shell opening to flipper root ----
+  const socketGeo = makeLoftZ([
+    { z: 0, rx: 0.20, ry: 0.19, rd: 0.17, n: 2.4 },
+    { z: 0.10, rx: 0.185, ry: 0.175, rd: 0.155, n: 2.4 },
+    { z: 0.20, rx: 0.150, ry: 0.140, rd: 0.125, n: 2.3 },
+    { z: 0.27, rx: 0.115, ry: 0.105, rd: 0.095, n: 2.2 }
+  ], 16, 14)
+  const hipGeo = makeLoftZ([
+    { z: 0, rx: 0.17, ry: 0.16, rd: 0.145, n: 2.4 },
+    { z: 0.09, rx: 0.150, ry: 0.140, rd: 0.125, n: 2.3 },
+    { z: 0.17, rx: 0.115, ry: 0.105, rd: 0.095, n: 2.2 },
+    { z: 0.22, rx: 0.085, ry: 0.078, rd: 0.070, n: 2.2 }
+  ], 14, 12)
   for (const sx of [1, -1]) {
-    const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.16, 14, 10), skinMat)
-    shoulder.scale.set(1.0, 0.85, 1.3)
-    shoulder.position.set(sx * 0.58, -0.03, 0.30)
-    g.add(shoulder)
-    const hip = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 9), skinMat)
-    hip.scale.set(1.0, 0.85, 1.25)
-    hip.position.set(sx * 0.52, -0.03, -1.02)
-    g.add(hip)
+    const sh = new THREE.Mesh(socketGeo, skinMat)
+    sh.position.set(sx * 0.40, -0.06, 0.34)
+    sh.rotation.y = sx * (Math.PI / 2 - 0.35)
+    g.add(sh)
+    const hp = new THREE.Mesh(hipGeo, skinMat)
+    hp.position.set(sx * 0.36, -0.07, -0.94)
+    hp.rotation.y = sx * (Math.PI / 2 + 0.45)
+    g.add(hp)
   }
 
-  // flippers (sculpted paddles, front large / rear small)
-  const frontGeo = makeFlipperGeometry(1.0, 0.42, 0.05)
-  const rearGeo = makeFlipperGeometry(0.6, 0.34, 0.04)
+  // ---- flippers ----
+  const frontGeo = makeFlipperGeometry({
+    len: 1.12,
+    chord: 0.46,
+    thick: 0.052,
+    ch: [0.80, 1.00, 0.99, 0.90, 0.74, 0.52, 0.18],
+    le: [0.44, 0.46, 0.38, 0.22, 0.00, -0.26, -0.54],
+    th: [1.00, 0.96, 0.82, 0.64, 0.46, 0.28, 0.10],
+    droop: [0.00, -0.01, -0.03, -0.07, -0.13, -0.21, -0.31],
+    twist: [0.00, 0.04, 0.10, 0.18, 0.28, 0.38, 0.46],
+    digits: 5
+  })
+  const rearGeo = makeFlipperGeometry({
+    len: 0.60,
+    chord: 0.40,
+    thick: 0.046,
+    ch: [0.86, 1.00, 1.02, 0.94, 0.72, 0.40],
+    le: [0.44, 0.46, 0.40, 0.28, 0.10, -0.10],
+    th: [1.00, 0.94, 0.80, 0.60, 0.38, 0.16],
+    droop: [0.00, -0.01, -0.03, -0.06, -0.10, -0.15],
+    twist: [0.00, 0.05, 0.12, 0.20, 0.28, 0.34],
+    digits: 4
+  })
+  const clawGeo = makeLoftZ([
+    { z: 0, rx: 0.026, ry: 0.022 },
+    { z: 0.035, rx: 0.019, ry: 0.016 },
+    { z: 0.065, rx: 0.010, ry: 0.009 },
+    { z: 0.082, rx: 0.003, ry: 0.003 }
+  ], 10, 8)
+  const frontGeoL = mirrorX(frontGeo)
+  const rearGeoL = mirrorX(rearGeo)
   const flippers = []
   for (const sx of [1, -1]) {
     const pivot = new THREE.Group()
-    pivot.position.set(sx * 0.60, -0.05, 0.30)
-    pivot.rotation.y = sx > 0 ? 0.55 : Math.PI + 0.55
-    pivot.add(new THREE.Mesh(frontGeo, skinMat))
+    pivot.position.set(sx * 0.60, -0.09, 0.32)
+    pivot.rotation.y = sx * 0.55
+    pivot.add(new THREE.Mesh(sx > 0 ? frontGeo : frontGeoL, skinMat))
+    // claw on the leading edge, as on a real fore-flipper
+    const claw = new THREE.Mesh(clawGeo, hornMat)
+    claw.position.set(sx * 0.52, -0.012, 0.20)
+    claw.rotation.y = sx * -0.5
+    claw.rotation.z = sx * -0.25
+    pivot.add(claw)
     g.add(pivot)
     flippers.push({ pivot, front: true, side: sx })
   }
   for (const sx of [1, -1]) {
     const pivot = new THREE.Group()
-    pivot.position.set(sx * 0.55, -0.05, -1.00)
-    pivot.rotation.y = sx > 0 ? 1.15 : Math.PI + 1.15
-    pivot.add(new THREE.Mesh(rearGeo, skinMat))
+    pivot.position.set(sx * 0.52, -0.10, -1.00)
+    pivot.rotation.y = sx * 1.15
+    pivot.add(new THREE.Mesh(sx > 0 ? rearGeo : rearGeoL, skinMat))
     g.add(pivot)
     flippers.push({ pivot, front: false, side: sx })
   }
 
-  // tail (base blend + joint pivot)
-  const tailBase = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 9), skinMat)
-  tailBase.scale.set(0.9, 0.7, 1.3)
-  tailBase.position.set(0, -0.02, -1.30)
-  g.add(tailBase)
+  // ---- tail ----
   const tailPivot = new THREE.Group()
-  tailPivot.position.set(0, -0.03, -1.30)
-  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.44, 8), skinMat)
-  tail.rotation.x = -Math.PI / 2
-  tail.position.z = -0.18
-  tailPivot.add(tail)
+  tailPivot.position.set(0, -0.09, -1.24)
+  const tailGeo = makeLoftZ([
+    { z: 0, cy: 0, rx: 0.115, ry: 0.100, rd: 0.090, n: 2.4 },
+    { z: 0.10, cy: -0.012, rx: 0.094, ry: 0.082, rd: 0.074, n: 2.4 },
+    { z: 0.22, cy: -0.028, rx: 0.070, ry: 0.062, rd: 0.056, n: 2.3 },
+    { z: 0.32, cy: -0.044, rx: 0.048, ry: 0.044, rd: 0.040, n: 2.2 },
+    { z: 0.40, cy: -0.058, rx: 0.030, ry: 0.028, rd: 0.026, n: 2.2 },
+    { z: 0.44, cy: -0.066, rx: 0.017, ry: 0.016, rd: 0.015, n: 2.2 }
+  ], 14, 20, (s, a, t) => 1 + 0.05 * Math.sin(t * 26) * (1 - t))
+  tailGeo.rotateY(Math.PI)
+  tailPivot.add(new THREE.Mesh(tailGeo, skinMat))
   g.add(tailPivot)
 
   g.scale.setScalar(1.15)
@@ -2533,16 +2965,18 @@ export function useOceanScene(containerRef) {
         turtle.head.rotation.y = Math.sin(t * 0.5) * 0.18
         turtle.head.rotation.x = (0.5 - diveT) * 0.6 + Math.sin(t * 0.3) * 0.08
         turtle.jaw.rotation.x = 0.045 + 0.05 * (0.5 + 0.5 * Math.sin(t * 0.55))
-        // flippers: front crawl (asymmetric stroke), rear opposite small
+        // flippers: front flaps (rotation.z about its own fore-aft axis) with a
+        // feathering pitch a quarter-cycle behind; rears trail as small rudders
         const p = t * 2.1
-        const stroke = Math.sin(p) * (0.6 - 0.4 * Math.sin(p))
-        const rear = Math.sin(p + Math.PI / 2) * 0.3
+        const flap = Math.sin(p) * (0.62 - 0.22 * Math.sin(p))
+        const feather = 0.34 * Math.sin(p - 1.0)
         for (const f of turtle.flippers) {
           if (f.front) {
-            f.pivot.rotation.x = stroke
-            f.pivot.rotation.z = 0.1 + 0.08 * Math.sin(p + f.side)
+            f.pivot.rotation.z = f.side * (0.10 + flap)
+            f.pivot.rotation.x = feather
           } else {
-            f.pivot.rotation.x = -rear
+            f.pivot.rotation.z = f.side * (0.06 + 0.20 * Math.sin(p + 1.7))
+            f.pivot.rotation.x = 0.12 * Math.sin(p + 2.4)
           }
         }
         turtle.tailPivot.rotation.x = Math.sin(t * 1.3) * 0.25

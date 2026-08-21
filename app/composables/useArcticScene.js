@@ -44,6 +44,25 @@ function inLagoon(x, z, margin = 0) {
   return e < 1
 }
 
+// Blends the natural terrain height toward a level pad height near placed
+// structures, so a flat-bottomed building sits on flat ground instead of
+// straddling the surrounding hillside noise. Each pad is flat within
+// `inner` and eases back to natural terrain by `outer`.
+function applyBuildingPads(x, z, h, pads) {
+  let weight = 0
+  let target = h
+  for (const p of pads) {
+    const d = Math.hypot(x - p.x, z - p.z)
+    if (d >= p.outer) continue
+    const w = 1 - THREE.MathUtils.smoothstep(d, p.inner, p.outer)
+    if (w > weight) {
+      weight = w
+      target = p.h
+    }
+  }
+  return h * (1 - weight) + target * weight
+}
+
 // ---------- helpers ----------
 
 function makeRadialTexture(size, stops) {
@@ -874,9 +893,17 @@ export function useArcticScene(containerRef) {
   const foxes = []
   const reindeer = []
   const occupiedSpots = []
+  // flat building pads: structures sink their footprint into a level patch
+  // of terrain instead of draping over its natural noise
+  const buildingPads = []
 
   function toggleAutoRotate() {
     autoRotate.value = !autoRotate.value
+  }
+
+  // true when (x, z) sits inside (or close to) a structure's footprint
+  function inBuildingPad(x, z, margin = 0) {
+    return buildingPads.some((p) => Math.hypot(x - p.x, z - p.z) < p.inner + margin)
   }
 
   function pickDryTarget(a, xMax) {
@@ -889,7 +916,7 @@ export function useArcticScene(containerRef) {
       attempts++
     } while (
       attempts < 60 &&
-      (inLagoon(x, z, 6) || getHeight(x, z) < SAFE_H + 0.4 || getHeight(x, z) > 9)
+      (inLagoon(x, z, 6) || getHeight(x, z) < SAFE_H + 0.4 || getHeight(x, z) > 9 || inBuildingPad(x, z, 1.2))
     )
     a.target.set(x, getHeight(x, z), z)
   }
@@ -932,8 +959,52 @@ export function useArcticScene(containerRef) {
     const dz = a.target.z - a.pos.z
     const dist = Math.hypot(dx, dz)
     if (dist < 1.5) return false
-    const nx = a.pos.x + (dx / dist) * speed * delta
-    const nz = a.pos.z + (dz / dist) * speed * delta
+    let dirX = dx / dist
+    let dirZ = dz / dist
+
+    // steer around building pads: near a structure's footprint, blend in a
+    // tangential push (mostly sideways, a little outward) so the animal
+    // curves around igloos/tent/campfire instead of cutting through them.
+    // The tangent's sign is picked to lean toward the seek direction, but
+    // even head-on (agent, pad, target exactly in line) it's never zero —
+    // that's what keeps a straight approach from stalling at the pad edge.
+    for (const p of buildingPads) {
+      const avoid = p.inner + 1.6
+      const ex = a.pos.x - p.x
+      const ez = a.pos.z - p.z
+      const ed = Math.hypot(ex, ez)
+      if (ed < avoid) {
+        const ux = ed > 0.0001 ? ex / ed : 1
+        const uz = ed > 0.0001 ? ez / ed : 0
+        let tx = -uz
+        let tz = ux
+        if (tx * dx + tz * dz < 0) { tx = -tx; tz = -tz }
+        const closeness = (1 - Math.min(1, ed / avoid)) * 2.2
+        dirX += (tx * 0.85 + ux * 0.55) * closeness
+        dirZ += (tz * 0.85 + uz * 0.55) * closeness
+      }
+    }
+    const dl = Math.hypot(dirX, dirZ) || 1
+    dirX /= dl
+    dirZ /= dl
+
+    let nx = a.pos.x + dirX * speed * delta
+    let nz = a.pos.z + dirZ * speed * delta
+
+    // hard clamp: never let the step land inside a pad's flat footprint,
+    // even if the steering above couldn't fully cancel the approach
+    for (const p of buildingPads) {
+      const ex = nx - p.x
+      const ez = nz - p.z
+      const ed = Math.hypot(ex, ez)
+      if (ed < p.inner) {
+        const ux = ed > 0.0001 ? ex / ed : 1
+        const uz = ed > 0.0001 ? ez / ed : 0
+        nx = p.x + ux * p.inner
+        nz = p.z + uz * p.inner
+      }
+    }
+
     const nh = getHeight(nx, nz)
     if (a.pos.y >= minH && nh < minH) return false
     a.pos.set(nx, getHeight(nx, nz), nz)
@@ -1031,6 +1102,116 @@ export function useArcticScene(containerRef) {
       scene.add(new THREE.Points(geo, mat))
     }
 
+    // ---- structures: igloos, tent, campfire, sled ----
+    {
+      const iglooTex = makeIglooTexture()
+      const tentTex = makeTentTexture()
+      const woodTex = makeWoodTexture()
+      texAssets.push(iglooTex, tentTex, woodTex)
+      const iglooMat = new THREE.MeshStandardMaterial({ map: iglooTex, roughness: 0.6 })
+      const doorMat = new THREE.MeshStandardMaterial({ color: 0x0e1620, roughness: 1 })
+      const woodMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.8 })
+
+      // igloos near the shore, doors facing the lagoon
+      const igloo1Pos = findDrySpot([], 42, 0)
+      occupiedSpots.push(igloo1Pos)
+      buildingPads.push({ x: igloo1Pos.x, z: igloo1Pos.z, h: igloo1Pos.h, inner: 2.9, outer: 5.2 })
+      const igloo1 = buildIgloo(iglooMat, doorMat)
+      igloo1.position.set(igloo1Pos.x, igloo1Pos.h - 0.1, igloo1Pos.z)
+      igloo1.rotation.y = Math.atan2(-igloo1Pos.x, -igloo1Pos.z)
+      igloo1.scale.setScalar(1.3)
+      scene.add(igloo1)
+
+      const igloo2Pos = findDrySpot([igloo1Pos], 48, 18)
+      occupiedSpots.push(igloo2Pos)
+      buildingPads.push({ x: igloo2Pos.x, z: igloo2Pos.z, h: igloo2Pos.h, inner: 2.4, outer: 4.4 })
+      const igloo2 = buildIgloo(iglooMat, doorMat)
+      igloo2.position.set(igloo2Pos.x, igloo2Pos.h - 0.1, igloo2Pos.z)
+      igloo2.rotation.y = Math.atan2(-igloo2Pos.x, -igloo2Pos.z) + 0.4
+      igloo2.scale.setScalar(1.05)
+      scene.add(igloo2)
+
+      // tent near igloo 1
+      const tentPos = findNearDry(igloo1Pos.x, igloo1Pos.z, 5, 7)
+      if (tentPos) {
+        occupiedSpots.push(tentPos)
+        buildingPads.push({ x: tentPos.x, z: tentPos.z, h: tentPos.h, inner: 1.8, outer: 3.6 })
+        const tent = buildTent(new THREE.MeshStandardMaterial({ map: tentTex, roughness: 0.85 }), doorMat)
+        tent.position.set(tentPos.x, tentPos.h - 0.05, tentPos.z)
+        tent.rotation.y = Math.atan2(-tentPos.x, -tentPos.z)
+        scene.add(tent)
+      }
+
+      // campfire
+      const campPos = findNearDry(igloo1Pos.x, igloo1Pos.z, 3.5, 5.5)
+        || { x: igloo1Pos.x + 4, z: igloo1Pos.z, h: igloo1Pos.h }
+      occupiedSpots.push(campPos)
+      buildingPads.push({ x: campPos.x, z: campPos.z, h: campPos.h, inner: 1.0, outer: 2.2 })
+      const stoneMat = new THREE.MeshStandardMaterial({ color: 0x3c4450, roughness: 0.95, flatShading: true })
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2
+        const st = new THREE.Mesh(new THREE.DodecahedronGeometry(0.14 + Math.random() * 0.07, 0), stoneMat)
+        st.position.set(campPos.x + Math.cos(a) * 0.45, campPos.h + 0.08, campPos.z + Math.sin(a) * 0.45)
+        scene.add(st)
+      }
+      for (let i = 0; i < 3; i++) {
+        const log = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 6), woodMat)
+        log.rotation.z = Math.PI / 2
+        log.rotation.y = (i / 3) * Math.PI + 0.3
+        log.position.set(campPos.x, campPos.h + 0.1, campPos.z)
+        scene.add(log)
+      }
+      const flameGeo = new THREE.ConeGeometry(0.11, 0.4, 6)
+      flameGeo.translate(0, 0.2, 0)
+      for (let i = 0; i < 3; i++) {
+        const fmat = new THREE.MeshBasicMaterial({
+          color: i === 0 ? 0xffaa33 : 0xff6622,
+          transparent: true, opacity: 0.85,
+          blending: THREE.AdditiveBlending, depthWrite: false
+        })
+        const f = new THREE.Mesh(flameGeo, fmat)
+        f.position.set(campPos.x + (Math.random() - 0.5) * 0.16, campPos.h + 0.12, campPos.z + (Math.random() - 0.5) * 0.16)
+        scene.add(f)
+        flames.push(f)
+      }
+      fireLight = new THREE.PointLight(0xff7733, 8, 20, 2)
+      fireLight.position.set(campPos.x, campPos.h + 0.7, campPos.z)
+      scene.add(fireLight)
+      const smokeTex = makeRadialTexture(64, [
+        [0, 'rgba(190,205,220,0.5)'],
+        [1, 'rgba(190,205,220,0)']
+      ])
+      texAssets.push(smokeTex)
+      for (let i = 0; i < 3; i++) {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, transparent: true, opacity: 0.25, depthWrite: false }))
+        sp.position.set(campPos.x, campPos.h + 1.2, campPos.z)
+        scene.add(sp)
+        smokes.push({ sprite: sp, baseX: campPos.x, baseY: campPos.h + 0.9, phase: i / 3 })
+      }
+
+      // sled
+      const sledPos = findNearDry(campPos.x, campPos.z, 3, 5)
+      if (sledPos) {
+        buildingPads.push({ x: sledPos.x, z: sledPos.z, h: sledPos.h, inner: 1.5, outer: 2.8 })
+        const sled = buildSled(woodMat)
+        sled.position.set(sledPos.x, sledPos.h, sledPos.z)
+        sled.rotation.y = -0.7
+        scene.add(sled)
+      }
+
+      // driftwood near the shore
+      const driftMat = new THREE.MeshStandardMaterial({ map: woodTex, color: 0x9aa0a6, roughness: 0.9 })
+      for (let i = 0; i < 3; i++) {
+        const p = findNearDry(0, 0, 55, 66)
+        if (!p) break
+        const log = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 1.8, 6), driftMat)
+        log.rotation.z = Math.PI / 2
+        log.rotation.y = Math.random() * Math.PI
+        log.position.set(p.x, p.h + 0.06, p.z)
+        scene.add(log)
+      }
+    }
+
     // ---- terrain (vertex colors + snow surface texture) ----
     {
       const snowTex = makeSnowGroundTexture(46)
@@ -1050,7 +1231,7 @@ export function useArcticScene(containerRef) {
       for (let i = 0; i < pos.count; i++) {
         const x = pos.getX(i)
         const z = pos.getZ(i)
-        const h = getHeight(x, z)
+        const h = applyBuildingPads(x, z, getHeight(x, z), buildingPads)
         pos.setY(i, h)
         if (h < WATER_Y - 0.4) {
           c.copy(bedIce)
@@ -1388,111 +1569,6 @@ export function useArcticScene(containerRef) {
       im.instanceMatrix.needsUpdate = true
       im.receiveShadow = true
       scene.add(im)
-    }
-
-    // ---- structures: igloos, tent, campfire, sled ----
-    {
-      const iglooTex = makeIglooTexture()
-      const tentTex = makeTentTexture()
-      const woodTex = makeWoodTexture()
-      texAssets.push(iglooTex, tentTex, woodTex)
-      const iglooMat = new THREE.MeshStandardMaterial({ map: iglooTex, roughness: 0.6 })
-      const doorMat = new THREE.MeshStandardMaterial({ color: 0x0e1620, roughness: 1 })
-      const woodMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.8 })
-
-      // igloos near the shore, doors facing the lagoon
-      const igloo1Pos = findDrySpot([], 42, 0)
-      occupiedSpots.push(igloo1Pos)
-      const igloo1 = buildIgloo(iglooMat, doorMat)
-      igloo1.position.set(igloo1Pos.x, igloo1Pos.h - 0.1, igloo1Pos.z)
-      igloo1.rotation.y = Math.atan2(-igloo1Pos.x, -igloo1Pos.z)
-      igloo1.scale.setScalar(1.3)
-      scene.add(igloo1)
-
-      const igloo2Pos = findDrySpot([igloo1Pos], 48, 18)
-      occupiedSpots.push(igloo2Pos)
-      const igloo2 = buildIgloo(iglooMat, doorMat)
-      igloo2.position.set(igloo2Pos.x, igloo2Pos.h - 0.1, igloo2Pos.z)
-      igloo2.rotation.y = Math.atan2(-igloo2Pos.x, -igloo2Pos.z) + 0.4
-      igloo2.scale.setScalar(1.05)
-      scene.add(igloo2)
-
-      // tent near igloo 1
-      const tentPos = findNearDry(igloo1Pos.x, igloo1Pos.z, 5, 7)
-      if (tentPos) {
-        occupiedSpots.push(tentPos)
-        const tent = buildTent(new THREE.MeshStandardMaterial({ map: tentTex, roughness: 0.85 }), doorMat)
-        tent.position.set(tentPos.x, tentPos.h - 0.05, tentPos.z)
-        tent.rotation.y = Math.atan2(-tentPos.x, -tentPos.z)
-        scene.add(tent)
-      }
-
-      // campfire
-      const campPos = findNearDry(igloo1Pos.x, igloo1Pos.z, 3.5, 5.5)
-        || { x: igloo1Pos.x + 4, z: igloo1Pos.z, h: igloo1Pos.h }
-      occupiedSpots.push(campPos)
-      const stoneMat = new THREE.MeshStandardMaterial({ color: 0x3c4450, roughness: 0.95, flatShading: true })
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2
-        const st = new THREE.Mesh(new THREE.DodecahedronGeometry(0.14 + Math.random() * 0.07, 0), stoneMat)
-        st.position.set(campPos.x + Math.cos(a) * 0.45, campPos.h + 0.08, campPos.z + Math.sin(a) * 0.45)
-        scene.add(st)
-      }
-      for (let i = 0; i < 3; i++) {
-        const log = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 6), woodMat)
-        log.rotation.z = Math.PI / 2
-        log.rotation.y = (i / 3) * Math.PI + 0.3
-        log.position.set(campPos.x, campPos.h + 0.1, campPos.z)
-        scene.add(log)
-      }
-      const flameGeo = new THREE.ConeGeometry(0.11, 0.4, 6)
-      flameGeo.translate(0, 0.2, 0)
-      for (let i = 0; i < 3; i++) {
-        const fmat = new THREE.MeshBasicMaterial({
-          color: i === 0 ? 0xffaa33 : 0xff6622,
-          transparent: true, opacity: 0.85,
-          blending: THREE.AdditiveBlending, depthWrite: false
-        })
-        const f = new THREE.Mesh(flameGeo, fmat)
-        f.position.set(campPos.x + (Math.random() - 0.5) * 0.16, campPos.h + 0.12, campPos.z + (Math.random() - 0.5) * 0.16)
-        scene.add(f)
-        flames.push(f)
-      }
-      fireLight = new THREE.PointLight(0xff7733, 8, 20, 2)
-      fireLight.position.set(campPos.x, campPos.h + 0.7, campPos.z)
-      scene.add(fireLight)
-      const smokeTex = makeRadialTexture(64, [
-        [0, 'rgba(190,205,220,0.5)'],
-        [1, 'rgba(190,205,220,0)']
-      ])
-      texAssets.push(smokeTex)
-      for (let i = 0; i < 3; i++) {
-        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, transparent: true, opacity: 0.25, depthWrite: false }))
-        sp.position.set(campPos.x, campPos.h + 1.2, campPos.z)
-        scene.add(sp)
-        smokes.push({ sprite: sp, baseX: campPos.x, baseY: campPos.h + 0.9, phase: i / 3 })
-      }
-
-      // sled
-      const sledPos = findNearDry(campPos.x, campPos.z, 3, 5)
-      if (sledPos) {
-        const sled = buildSled(woodMat)
-        sled.position.set(sledPos.x, sledPos.h, sledPos.z)
-        sled.rotation.y = -0.7
-        scene.add(sled)
-      }
-
-      // driftwood near the shore
-      const driftMat = new THREE.MeshStandardMaterial({ map: woodTex, color: 0x9aa0a6, roughness: 0.9 })
-      for (let i = 0; i < 3; i++) {
-        const p = findNearDry(0, 0, 55, 66)
-        if (!p) break
-        const log = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 1.8, 6), driftMat)
-        log.rotation.z = Math.PI / 2
-        log.rotation.y = Math.random() * Math.PI
-        log.position.set(p.x, p.h + 0.06, p.z)
-        scene.add(log)
-      }
     }
 
     // ---- snow ----
