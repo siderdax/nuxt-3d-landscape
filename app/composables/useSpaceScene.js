@@ -581,6 +581,222 @@ function makeDropship(kit) {
   return { group: g, engineMat, flameMat, flames, beaconMat }
 }
 
+// ---------- alien raiders (dropship gun targets) ----------
+
+function skiffHullShape() {
+  const s = new THREE.Shape()
+  s.moveTo(0, 1.5)
+  s.lineTo(0.55, 0.45)
+  s.lineTo(1.75, -0.1)
+  s.lineTo(1.1, -0.8)
+  s.lineTo(0.45, -0.5)
+  s.lineTo(0, -1.0)
+  s.lineTo(-0.45, -0.5)
+  s.lineTo(-1.1, -0.8)
+  s.lineTo(-1.75, -0.1)
+  s.lineTo(-0.55, 0.45)
+  s.closePath()
+  return s
+}
+
+function skiffFinShape() {
+  const s = new THREE.Shape()
+  s.moveTo(0, 0)
+  s.lineTo(-0.15, 0.9)
+  s.lineTo(-0.75, 0.9)
+  s.lineTo(-0.55, 0)
+  s.closePath()
+  return s
+}
+
+function bladeShape() {
+  const s = new THREE.Shape()
+  s.moveTo(0, 0.1)
+  s.lineTo(0.9, 0.03)
+  s.lineTo(1.15, 0)
+  s.lineTo(0.9, -0.03)
+  s.lineTo(0, -0.1)
+  s.closePath()
+  return s
+}
+
+function makeRaiderKit(track) {
+  const hullATex = makePanelTexture({ base: '#9b8299', label: 'KRAV', labelSub: 'VOID HIVE', hazard: true })
+  const hullBTex = makePanelTexture({ base: '#8d7390', label: 'VOID' })
+  track.push(hullATex, hullBTex)
+  const matsA = {
+    hull: new THREE.MeshStandardMaterial({ map: hullATex, bumpMap: hullATex, bumpScale: 0.02, roughness: 0.45, metalness: 0.55, emissive: 0x4a3a4a, emissiveIntensity: 0.45 }),
+    dark: new THREE.MeshStandardMaterial({ color: 0x4a3d4d, roughness: 0.6, metalness: 0.5 }),
+    accent: new THREE.MeshStandardMaterial({ color: 0x3a1c12, emissive: 0xff7a3a, emissiveIntensity: 2.0, roughness: 0.4 }),
+    glass: new THREE.MeshStandardMaterial({ color: 0xffc898, roughness: 0.15, metalness: 0.6, emissive: 0x884422, emissiveIntensity: 0.8 }),
+    beacon: null
+  }
+  const matsB = {
+    hull: new THREE.MeshStandardMaterial({ map: hullBTex, bumpMap: hullBTex, bumpScale: 0.02, roughness: 0.45, metalness: 0.55, emissive: 0x46364a, emissiveIntensity: 0.45 }),
+    dark: new THREE.MeshStandardMaterial({ color: 0x423748, roughness: 0.6, metalness: 0.5 }),
+    accent: new THREE.MeshStandardMaterial({ color: 0x3a1c12, emissive: 0xff9944, emissiveIntensity: 2.2, roughness: 0.4 }),
+    eye: new THREE.MeshStandardMaterial({ color: 0x441008, emissive: 0xff5533, emissiveIntensity: 2.8 })
+  }
+  return { matsA, matsB }
+}
+
+function makeRaider(type, kit) {
+  const g = new THREE.Group()
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
+    const m = new THREE.Mesh(geo, mat)
+    m.position.set(x, y, z)
+    if (rx) m.rotation.x = rx
+    if (ry) m.rotation.y = ry
+    if (rz) m.rotation.z = rz
+    g.add(m)
+    return m
+  }
+  const flames = []
+  const engineMat = new THREE.MeshStandardMaterial({ color: 0x30180f, emissive: 0xff8844, emissiveIntensity: 1.3, roughness: 0.4 })
+  const flameMat = new THREE.MeshBasicMaterial({ color: 0xffc088, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false })
+  let beaconMat = null
+
+  if (type === 'skiff') {
+    const { hull, dark, accent, glass } = kit.matsA
+    beaconMat = new THREE.MeshStandardMaterial({ color: 0x330806, emissive: 0xff3322, emissiveIntensity: 2 })
+    // angular dart hull (built +Z forward)
+    const hullGeo = new THREE.ExtrudeGeometry(skiffHullShape(), {
+      depth: 0.85, bevelEnabled: true, bevelThickness: 0.16, bevelSize: 0.12, bevelSegments: 5, curveSegments: 4
+    })
+    hullGeo.rotateX(Math.PI / 2)
+    hullGeo.translate(0, 0.4, -0.425)
+    add(hullGeo, hull, 0, 0, 0)
+    // armor pods (faceted icosahedra) for a bio-mechanical silhouette
+    const podGeo = new THREE.IcosahedronGeometry(0.24, 2)
+    add(podGeo, dark, 0.62, 0.16, 0.35)
+    add(podGeo, dark, -0.62, 0.16, 0.35)
+    add(podGeo, dark, 0.3, 0.1, -0.75)
+    add(podGeo, dark, -0.3, 0.1, -0.75)
+    // angular nose spike + tip
+    const spikeGeo = new THREE.ConeGeometry(0.34, 0.9, 6)
+    spikeGeo.rotateX(Math.PI / 2)
+    add(spikeGeo, hull, 0, 0.05, 1.55)
+    add(new THREE.SphereGeometry(0.1, 10, 8), dark, 0, 0.05, 2.0)
+    // glass canopy dome
+    const canopyGeo = new THREE.SphereGeometry(0.3, 20, 16)
+    canopyGeo.scale(1.1, 0.55, 1.3)
+    add(canopyGeo, glass, 0, 0.38, 0.45)
+    add(new THREE.BoxGeometry(0.7, 0.03, 0.5), dark, 0, 0.52, 0.45)
+    // dorsal spine fin
+    const finGeo = new THREE.ExtrudeGeometry(skiffFinShape(), {
+      depth: 0.06, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 2, curveSegments: 4
+    })
+    finGeo.rotateY(-Math.PI / 2)
+    add(finGeo, hull, 0, 0.5, -0.4, 0, 0, 0)
+    add(new THREE.BoxGeometry(0.05, 0.05, 0.5), accent, 0, 1.32, -0.62)
+    // twin swept side fins
+    for (const sx of [-1, 1]) {
+      const sideGeo = new THREE.ExtrudeGeometry(skiffFinShape(), {
+        depth: 0.05, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.015, bevelSegments: 2, curveSegments: 4
+      })
+      sideGeo.rotateY(-Math.PI / 2)
+      sideGeo.rotateZ(Math.PI / 2)
+      sideGeo.rotateX(sx * 0.25)
+      add(sideGeo, hull, sx * 0.75, -0.18, -0.45)
+      // wingtip gun
+      const gunGeo = new THREE.CylinderGeometry(0.055, 0.055, 0.7, 8)
+      gunGeo.rotateX(Math.PI / 2)
+      add(gunGeo, dark, sx * 1.42, -0.05, 0.3)
+      add(new THREE.CylinderGeometry(0.02, 0.02, 0.12, 6).rotateX(Math.PI / 2), accent, sx * 1.42, -0.05, 0.68)
+    }
+    // twin hex engines with halo rings
+    for (const sx of [-1, 1]) {
+      const nacGeo = new THREE.CylinderGeometry(0.34, 0.44, 1.25, 6)
+      nacGeo.rotateX(Math.PI / 2)
+      add(nacGeo, hull, sx * 1.05, 0.05, -0.6)
+      add(new THREE.TorusGeometry(0.4, 0.05, 8, 20), dark, sx * 1.05, 0.05, -0.05)
+      const nozGeo = new THREE.CylinderGeometry(0.44, 0.3, 0.3, 6)
+      nozGeo.rotateX(Math.PI / 2)
+      add(nozGeo, dark, sx * 1.05, 0.05, -1.28)
+      const glowGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.08, 8)
+      glowGeo.rotateX(Math.PI / 2)
+      add(glowGeo, engineMat, sx * 1.05, 0.05, -1.44)
+      const flameGeo = new THREE.ConeGeometry(0.2, 1.0, 8)
+      flameGeo.rotateX(-Math.PI / 2)
+      flameGeo.translate(0, 0, -0.5)
+      flames.push(add(flameGeo, flameMat, sx * 1.05, 0.05, -1.48))
+    }
+    // glowing edge strips
+    add(new THREE.BoxGeometry(1.0, 0.02, 0.06), accent, 0.62, 0.1, -0.15, 0, 0, 0.1)
+    add(new THREE.BoxGeometry(1.0, 0.02, 0.06), accent, -0.62, 0.1, -0.15, 0, 0, -0.1)
+    add(new THREE.BoxGeometry(0.05, 0.05, 0.7), accent, 0, -0.35, -0.55)
+    // sensor mast + dish
+    add(new THREE.CylinderGeometry(0.018, 0.018, 0.5, 6), dark, 0, 0.78, -0.3)
+    const dishGeo = new THREE.SphereGeometry(0.2, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2)
+    dishGeo.rotateX(-Math.PI / 2)
+    add(dishGeo, hull, 0, 1.02, -0.3)
+    add(new THREE.SphereGeometry(0.045, 10, 8), beaconMat, 0, 1.42, -0.62)
+    g.scale.setScalar(1.7)
+  } else {
+    const { hull, dark, accent, eye } = kit.matsB
+    // faceted core + armor pods
+    add(new THREE.IcosahedronGeometry(0.5, 3), hull, 0, 0, 0)
+    add(new THREE.IcosahedronGeometry(0.34, 1), dark, 0, 0.02, 0.28)
+    add(new THREE.IcosahedronGeometry(0.2, 2), dark, 0.42, 0.2, -0.2)
+    add(new THREE.IcosahedronGeometry(0.2, 2), dark, -0.42, -0.16, -0.25)
+    // halo rings
+    const ring1 = new THREE.TorusGeometry(0.85, 0.09, 12, 36)
+    ring1.rotateX(Math.PI / 2)
+    const ring1M = add(ring1, dark, 0, 0, 0, 0, 0, 0.15)
+    ring1M.rotation.x = 0.12
+    const ring2 = new THREE.TorusGeometry(0.62, 0.05, 12, 32)
+    ring2.rotateY(Math.PI / 2)
+    add(ring2, hull, 0, 0, 0, 0, 0, -0.2)
+    // forward stinger
+    const stingGeo = new THREE.ConeGeometry(0.13, 1.0, 14)
+    stingGeo.rotateX(Math.PI / 2)
+    add(stingGeo, hull, 0, 0, 0.95)
+    add(new THREE.BoxGeometry(0.03, 0.03, 0.9), accent, 0.1, 0.05, 0.75)
+    add(new THREE.BoxGeometry(0.03, 0.03, 0.9), accent, -0.1, 0.05, 0.75)
+    // single tracker eye
+    const eyeGeo = new THREE.SphereGeometry(0.11, 16, 12)
+    add(eyeGeo, eye, 0, 0.12, 0.62)
+    // three rear spikes (faceted cones tilted back-out)
+    const spikeGeo = new THREE.ConeGeometry(0.09, 0.7, 10)
+    const spikeDir = new THREE.Vector3()
+    const Y_AXIS = new THREE.Vector3(0, 1, 0)
+    for (let i = 0; i < 3; i++) {
+      const phi = i * (Math.PI * 2 / 3)
+      spikeDir.set(Math.sin(phi) * 0.62, -0.3, Math.cos(phi) * 0.62).normalize()
+      const sp = add(spikeGeo, dark, Math.sin(phi) * 0.45, -0.12, Math.cos(phi) * 0.45)
+      sp.quaternion.setFromUnitVectors(Y_AXIS, spikeDir)
+    }
+    // four swept blades
+    const bladeGeo = new THREE.ExtrudeGeometry(bladeShape(), {
+      depth: 0.03, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 2, curveSegments: 4
+    })
+    bladeGeo.rotateX(Math.PI / 2)
+    for (const s of [1, -1]) {
+      for (const yOff of [0.14, -0.14]) {
+        const b = add(bladeGeo, hull, s * 0.3, yOff, 0.1)
+        b.rotation.y = s * (Math.PI / 2 - 0.5)
+        if (yOff < 0) b.rotation.z = 0.25
+        else b.rotation.z = -0.25
+      }
+    }
+    // twin pods with thrusters
+    for (const sx of [-1, 1]) {
+      const podGeo = new THREE.CylinderGeometry(0.16, 0.2, 0.5, 8)
+      podGeo.rotateX(Math.PI / 2)
+      add(podGeo, hull, sx * 0.55, -0.15, -0.35)
+      const glowGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.06, 10)
+      glowGeo.rotateX(Math.PI / 2)
+      add(glowGeo, engineMat, sx * 0.55, -0.15, -0.62)
+      const flameGeo = new THREE.ConeGeometry(0.09, 0.55, 10)
+      flameGeo.rotateX(-Math.PI / 2)
+      flameGeo.translate(0, 0, -0.28)
+      flames.push(add(flameGeo, flameMat, sx * 0.55, -0.15, -0.65))
+    }
+    g.scale.setScalar(1.15)
+  }
+  return { group: g, engineMat, flameMat, flames, beaconMat }
+}
+
 // ---------- teran outpost ----------
 
 function buildOutpost(track) {
@@ -1071,6 +1287,86 @@ export function useSpaceScene(containerRef) {
       }
     }
 
+    // ---- alien raiders (wander the high ground; dropship guns track them) ----
+    const raiderKit = makeRaiderKit(texAssets)
+    const raiders = []
+    function spawnRaider(type) {
+      const raider = makeRaider(type, raiderKit)
+      const isA = type === 'skiff'
+      const homeRadius = isA ? 78 + Math.random() * 28 : 95 + Math.random() * 35
+      const az = Math.random() * Math.PI * 2
+      const el = (Math.random() - 0.5) * 0.7
+      const pos = new THREE.Vector3(
+        Math.cos(el) * Math.cos(az),
+        Math.sin(el) * 0.6,
+        Math.cos(el) * Math.sin(az)
+      ).multiplyScalar(homeRadius)
+      pos.y = THREE.MathUtils.clamp(pos.y, -24, 42)
+      pos.add(PLANET_POS)
+      // initial heading: tangent to the planet, random direction
+      const heading = new THREE.Vector3(0, 1, 0)
+        .cross(pos.clone().sub(PLANET_POS))
+        .normalize()
+      if (Math.random() > 0.5) heading.multiplyScalar(-1)
+      heading.y *= 0.4
+      heading.normalize()
+      raider.group.position.copy(pos)
+      scene.add(raider.group)
+      raiders.push({
+        group: raider.group, pos, heading,
+        speed: isA ? 7 + Math.random() * 2 : 10.5 + Math.random() * 2.5,
+        homeRadius,
+        yaw0: Math.atan2(heading.x, heading.z),
+        f1: 0.09 + Math.random() * 0.07,
+        f2: 0.037 + Math.random() * 0.05,
+        f3: 0.11 + Math.random() * 0.09,
+        p1: Math.random() * Math.PI * 2,
+        p2: Math.random() * Math.PI * 2,
+        p3: Math.random() * Math.PI * 2,
+        bank: 0,
+        engineMat: raider.engineMat, flameMat: raider.flameMat, flames: raider.flames, beaconMat: raider.beaconMat
+      })
+    }
+    for (let i = 0; i < 3; i++) spawnRaider('skiff')
+    for (let i = 0; i < 4; i++) spawnRaider('wasp')
+
+    const _rw = new THREE.Vector3(), _rc = new THREE.Vector3(), _ro = new THREE.Vector3()
+    const _rf = new THREE.Vector3(), _rcr = new THREE.Vector3()
+    function updateRaiders(elapsed, delta) {
+      for (const r of raiders) {
+        // heading wanders with layered sines (pseudo-noise)
+        const yaw = r.yaw0 + Math.sin(elapsed * r.f1 + r.p1) * 1.15 + Math.sin(elapsed * r.f2 + r.p2) * 0.55
+        const pitch = Math.sin(elapsed * r.f3 + r.p3) * 0.5
+        _rw.set(Math.cos(pitch) * Math.sin(yaw), Math.sin(pitch), Math.cos(pitch) * Math.cos(yaw))
+        // containment: pull back toward the home shell (stronger the farther
+        // out), soft y band
+        _rc.subVectors(PLANET_POS, r.pos)
+        const err = r.pos.distanceTo(PLANET_POS) - r.homeRadius
+        _rw.addScaledVector(_rc.normalize(), THREE.MathUtils.clamp(err / 30, -0.5, 2.2))
+        _rw.y += THREE.MathUtils.clamp(-r.pos.y / 90, -0.35, 0.35)
+        _rw.normalize()
+        // ease the heading toward the steer direction, then advance
+        const o = _ro.copy(r.heading)
+        r.heading.lerp(_rw, 1 - Math.exp(-delta * 0.8)).normalize()
+        r.pos.addScaledVector(r.heading, r.speed * delta)
+        // bank into the turn from the signed yaw rate
+        _rcr.crossVectors(o, r.heading)
+        const ang = o.angleTo(r.heading)
+        if (delta > 1e-4) r.bank += (-(_rcr.y * ang / delta) * 1.1 - r.bank) * Math.min(1, delta * 2.5)
+        r.bank = THREE.MathUtils.clamp(r.bank, -0.6, 0.6)
+        r.group.position.copy(r.pos)
+        _rf.addVectors(r.pos, r.heading)
+        r.group.lookAt(_rf)
+        r.group.rotateZ(r.bank)
+        r.engineMat.emissiveIntensity = 0.9 + Math.sin(elapsed * 12 + r.p1) * 0.4
+        for (const f of r.flames) {
+          f.scale.set(1, 1, 0.7 + 0.45 * (0.5 + 0.5 * Math.sin(elapsed * 14 + r.p2)))
+        }
+        r.flameMat.opacity = 0.5 + 0.3 * (0.5 + 0.5 * Math.sin(elapsed * 18 + r.p3))
+        if (r.beaconMat) r.beaconMat.emissiveIntensity = 0.15 + 2.0 * Math.pow(Math.max(0, Math.sin(elapsed * 2.4 + r.p1)), 6)
+      }
+    }
+
     // ---- laser bolts ----
     const UP = new THREE.Vector3(0, 1, 0)
     const bolts = []
@@ -1086,7 +1382,7 @@ export function useSpaceScene(containerRef) {
       scene.add(mesh)
       bolts.push({
         mesh, pos: new THREE.Vector3(), dir: new THREE.Vector3(),
-        target: new THREE.Vector3(), life: 0, active: false
+        target: new THREE.Vector3(), raider: null, life: 0, active: false
       })
     }
     let boltTimer = 1.0
@@ -1095,7 +1391,15 @@ export function useSpaceScene(containerRef) {
       if (!b) return
       const ship = ships[Math.floor(Math.random() * ships.length)]
       b.pos.copy(ship.group.position).addScaledVector(ship.fwd, 6.0)
-      beltRockWorld(elapsed, Math.floor(Math.random() * beltData.length), b.target)
+      // aim at the nearest raider; fall back to a belt rock
+      let best = null, bd = Infinity
+      for (const r of raiders) {
+        const d = r.pos.distanceTo(b.pos)
+        if (d < bd) { bd = d; best = r }
+      }
+      b.raider = best
+      if (best) b.target.copy(best.pos)
+      else beltRockWorld(elapsed, Math.floor(Math.random() * beltData.length), b.target)
       b.dir.subVectors(b.target, b.pos).normalize()
       b.mesh.position.copy(b.pos)
       b.mesh.quaternion.setFromUnitVectors(UP, b.dir)
@@ -1111,10 +1415,11 @@ export function useSpaceScene(containerRef) {
       }
       for (const b of bolts) {
         if (!b.active) continue
-        b.pos.addScaledVector(b.dir, 60 * delta)
+        if (b.raider) b.target.copy(b.raider.pos)
+        b.pos.addScaledVector(b.dir, 90 * delta)
         b.life += delta
         b.mesh.position.copy(b.pos)
-        if (b.pos.distanceTo(b.target) < 2 || b.life > 1.4) {
+        if (b.pos.distanceTo(b.target) < 2 || b.life > 2.2) {
           spawnExplosion(b.pos)
           b.active = false
           b.mesh.visible = false
@@ -1204,6 +1509,7 @@ export function useSpaceScene(containerRef) {
       updateBelt(elapsed)
       updateOutpost(elapsed)
       updateSquadron(elapsed, CLOCK_DELTA)
+      updateRaiders(elapsed, CLOCK_DELTA)
       updateBolts(elapsed, CLOCK_DELTA)
       updateExplosions(CLOCK_DELTA)
       for (const m of nebulaMats) m.rotation += CLOCK_DELTA * 0.01
