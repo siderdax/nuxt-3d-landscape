@@ -258,6 +258,79 @@ function makeFurTexture(base, speckA, speckB) {
   }, 1)
 }
 
+// polar bear coat: warm white with blue-grey shadow patches, dense short
+// guard hairs and a few long highlights
+function makeBearFurTexture() {
+  return makeTileTexture(256, (ctx, s) => {
+    ctx.fillStyle = '#f2efe9'
+    ctx.fillRect(0, 0, s, s)
+    for (let i = 0; i < 26; i++) {
+      ctx.fillStyle = 'rgba(150,158,168,' + (0.05 + Math.random() * 0.08).toFixed(3) + ')'
+      ctx.beginPath()
+      ctx.ellipse(Math.random() * s, Math.random() * s, 8 + Math.random() * 22, 5 + Math.random() * 14, Math.random() * Math.PI, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    for (let i = 0; i < 1400; i++) {
+      const x = Math.random() * s
+      const y = Math.random() * s
+      ctx.strokeStyle = Math.random() > 0.55 ? 'rgba(255,255,255,0.5)' : 'rgba(186,180,168,0.42)'
+      ctx.lineWidth = 0.7
+      ctx.beginPath()
+      ctx.moveTo(x, y)
+      ctx.lineTo(x + (Math.random() - 0.5) * 3, y + 2.5 + Math.random() * 4)
+      ctx.stroke()
+    }
+    for (let i = 0; i < 90; i++) {
+      const x = Math.random() * s
+      const y = Math.random() * s
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)'
+      ctx.lineWidth = 0.9
+      ctx.beginPath()
+      ctx.moveTo(x, y)
+      ctx.quadraticCurveTo(x + (Math.random() - 0.5) * 5, y + 6, x + (Math.random() - 0.5) * 7, y + 10 + Math.random() * 8)
+      ctx.stroke()
+    }
+  }, 1)
+}
+
+// reindeer roan coat: brown base with dark/light roan mottling and tan
+// guard hairs
+function makeReindeerCoatTexture() {
+  return makeTileTexture(256, (ctx, s) => {
+    ctx.fillStyle = '#6a5140'
+    ctx.fillRect(0, 0, s, s)
+    for (let i = 0; i < 40; i++) {
+      const light = Math.random() > 0.5
+      ctx.fillStyle = light
+        ? 'rgba(140,112,86,' + (0.07 + Math.random() * 0.09).toFixed(3) + ')'
+        : 'rgba(45,32,22,' + (0.08 + Math.random() * 0.1).toFixed(3) + ')'
+      ctx.beginPath()
+      ctx.ellipse(Math.random() * s, Math.random() * s, 7 + Math.random() * 20, 5 + Math.random() * 12, Math.random() * Math.PI, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    for (let i = 0; i < 1500; i++) {
+      const x = Math.random() * s
+      const y = Math.random() * s
+      ctx.strokeStyle = Math.random() > 0.5 ? 'rgba(40,28,18,0.4)' : 'rgba(128,101,76,0.38)'
+      ctx.lineWidth = 0.7
+      ctx.beginPath()
+      ctx.moveTo(x, y)
+      ctx.lineTo(x + (Math.random() - 0.5) * 3, y + 2.5 + Math.random() * 4)
+      ctx.stroke()
+    }
+    for (let i = 0; i < 80; i++) {
+      const x = Math.random() * s
+      const y = Math.random() * s
+      ctx.strokeStyle = 'rgba(150,124,94,0.5)'
+      ctx.lineWidth = 0.9
+      ctx.beginPath()
+      ctx.moveTo(x, y)
+      ctx.quadraticCurveTo(x + (Math.random() - 0.5) * 5, y + 6, x + (Math.random() - 0.5) * 7, y + 10 + Math.random() * 8)
+      ctx.stroke()
+    }
+  }, 1)
+}
+
 function makeIglooTexture() {
   return makeTileTexture(256, (ctx, s) => {
     ctx.fillStyle = '#e4f0f9'
@@ -494,74 +567,162 @@ function makeLoft(sections, seg = 10) {
 
 function makeBear(kit) {
   const g = new THREE.Group()
-  const { fur: furMat, dark } = kit
-  // one sculpted body: rump -> shoulder hump -> chest -> neck -> head -> snout
-  const body = new THREE.Mesh(makeLoft([
-    { x: -0.9, cy: 0.92, ry: 0.26, rz: 0.24 },
-    { x: -0.6, cy: 0.97, ry: 0.40, rz: 0.36 },
-    { x: -0.25, cy: 1.02, ry: 0.48, rz: 0.44 },
-    { x: 0.15, cy: 1.10, ry: 0.52, rz: 0.48 },
-    { x: 0.45, cy: 1.02, ry: 0.46, rz: 0.42 },
-    { x: 0.7, cy: 1.06, ry: 0.33, rz: 0.31 },
-    { x: 0.9, cy: 1.22, ry: 0.27, rz: 0.26 },
-    { x: 1.1, cy: 1.30, ry: 0.24, rz: 0.23 },
-    { x: 1.3, cy: 1.25, ry: 0.15, rz: 0.15 },
-    { x: 1.5, cy: 1.21, ry: 0.06, rz: 0.07 }
-  ], 12), furMat)
+  const X_AXIS = new THREE.Vector3(1, 0, 0)
+  const { fur: furMat, dark, cream, shine } = kit
+  // ---- body: sculpted loft (rump -> haunch -> deep belly -> chest -> shoulder hump)
+  const body = new THREE.Group()
+  body.add(new THREE.Mesh(makeLoft([
+    { x: -0.92, cy: 0.95, ry: 0.30, rz: 0.27 },
+    { x: -0.62, cy: 1.00, ry: 0.44, rz: 0.40 },
+    { x: -0.30, cy: 1.02, ry: 0.50, rz: 0.46 },
+    { x: 0.00, cy: 1.00, ry: 0.52, rz: 0.48 },
+    { x: 0.28, cy: 1.02, ry: 0.52, rz: 0.48 },
+    { x: 0.55, cy: 1.10, ry: 0.50, rz: 0.46 },
+    { x: 0.78, cy: 1.22, ry: 0.46, rz: 0.42 },
+    { x: 0.95, cy: 1.32, ry: 0.42, rz: 0.38 },
+    { x: 1.05, cy: 1.38, ry: 0.38, rz: 0.35 },
+    { x: 1.15, cy: 1.42, ry: 0.32, rz: 0.30 }
+  ], 36), furMat))
+  // neck: separate loft rising off the withers
+  body.add(new THREE.Mesh(makeLoft([
+    { x: 1.05, cy: 1.38, ry: 0.33, rz: 0.31 },
+    { x: 1.22, cy: 1.50, ry: 0.28, rz: 0.27 },
+    { x: 1.38, cy: 1.60, ry: 0.25, rz: 0.24 },
+    { x: 1.52, cy: 1.66, ry: 0.23, rz: 0.22 }
+  ], 36), furMat))
   g.add(body)
-  // small accents only: ears, eyes, nose
-  const earGeo = new THREE.ConeGeometry(0.09, 0.13, 6)
-  const earL = new THREE.Mesh(earGeo, furMat)
-  earL.position.set(0.98, 1.5, 0.16)
-  earL.rotation.z = -0.3
-  const earR = earL.clone()
-  earR.position.z = -0.16
-  earR.rotation.z = 0.3
-  const eyeGeo = new THREE.SphereGeometry(0.045, 8, 6)
+
+  // ---- head: group pivoted at the neck base so it can bob and look around
+  const head = new THREE.Group()
+  head.position.set(1.52, 1.66, 0)
+  head.add(new THREE.Mesh(makeLoft([
+    { x: -0.08, cy: 0, ry: 0.21, rz: 0.20 },
+    { x: 0.05, cy: 0.01, ry: 0.20, rz: 0.19 },
+    { x: 0.18, cy: 0.0, ry: 0.175, rz: 0.165 },
+    { x: 0.30, cy: -0.005, ry: 0.145, rz: 0.135 },
+    { x: 0.42, cy: -0.01, ry: 0.115, rz: 0.105 },
+    { x: 0.52, cy: -0.012, ry: 0.09, rz: 0.085 }
+  ], 36), furMat))
+  const throat = new THREE.Mesh(new THREE.SphereGeometry(0.09, 20, 14), cream)
+  throat.scale.set(0.65, 0.42, 0.55)
+  throat.position.set(0.38, -0.1, 0)
+  head.add(throat)
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.065, 24, 18), dark)
+  nose.scale.set(0.8, 0.9, 1.1)
+  nose.position.set(0.555, -0.005, 0)
+  head.add(nose)
+  const nostrilGeo = new THREE.SphereGeometry(0.016, 12, 10)
+  const nostrilL = new THREE.Mesh(nostrilGeo, dark)
+  nostrilL.position.set(0.57, 0.008, 0.032)
+  const nostrilR = nostrilL.clone()
+  nostrilR.position.z = -0.032
+  head.add(nostrilL, nostrilR)
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.02, 0.1), dark)
+  mouth.position.set(0.5, -0.1, 0)
+  head.add(mouth)
+  const eyeGeo = new THREE.SphereGeometry(0.035, 24, 18)
+  const shineGeo = new THREE.SphereGeometry(0.012, 14, 10)
   const eyeL = new THREE.Mesh(eyeGeo, dark)
-  eyeL.position.set(1.26, 1.36, 0.14)
+  eyeL.position.set(0.14, 0.075, 0.155)
   const eyeR = eyeL.clone()
-  eyeR.position.z = -0.14
-  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), dark)
-  nose.scale.set(1.15, 0.85, 1.05)
-  nose.position.set(1.52, 1.22, 0)
-  g.add(earL, earR, eyeL, eyeR, nose)
-    // legs: one lofted column each; sections above the pivot stay buried
-    // inside the body through the full swing so no gap opens at the hip
-    const legGeo = makeLoft([
-      { x: -0.35, cy: 0, ry: 0.24, rz: 0.23 },
-      { x: -0.15, cy: 0, ry: 0.22, rz: 0.21 },
-      { x: 0, cy: 0, ry: 0.2, rz: 0.19 },
-      { x: 0.35, cy: 0, ry: 0.14, rz: 0.14 },
-      { x: 0.65, cy: 0, ry: 0.12, rz: 0.13 },
-      { x: 0.9, cy: 0, ry: 0.12, rz: 0.15 }
-    ], 12)
-  legGeo.rotateZ(-Math.PI / 2)
-  const legs = []
-  const pawGeo = new THREE.SphereGeometry(0.14, 8, 6)
-  for (const [sx, sz] of [[0.55, 0.34], [0.55, -0.34], [-0.55, 0.34], [-0.55, -0.34]]) {
-    const pivot = new THREE.Group()
-    pivot.position.set(sx, 0.95, sz)
-    const leg = new THREE.Mesh(legGeo, furMat)
-    const paw = new THREE.Mesh(pawGeo, furMat)
-    paw.scale.set(1.2, 0.5, 1.35)
-    paw.position.set(0.05, -0.88, 0)
-    pivot.add(leg, paw)
-    g.add(pivot)
-    legs.push(pivot)
+  eyeR.position.z = -0.155
+  const shineL = new THREE.Mesh(shineGeo, shine)
+  shineL.position.set(0.155, 0.088, 0.168)
+  const shineR = shineL.clone()
+  shineR.position.z = -0.168
+  head.add(eyeL, eyeR, shineL, shineR)
+  // small round ears: flattened sphere with a dark inner disc
+  const earGeo = new THREE.SphereGeometry(0.055, 18, 14)
+  const earInnerGeo = new THREE.SphereGeometry(0.038, 14, 10)
+  const makeEar = (side) => {
+    const ear = new THREE.Group()
+    ear.position.set(0.0, 0.2, 0.165 * side)
+    ear.rotation.z = -0.25 * side
+    const outer = new THREE.Mesh(earGeo, furMat)
+    outer.scale.set(0.45, 0.9, 0.85)
+    const inner = new THREE.Mesh(earInnerGeo, dark)
+    inner.scale.set(0.2, 0.75, 0.7)
+    inner.position.z = -0.02 * side
+    ear.add(outer, inner)
+    return ear
   }
+  const earL = makeEar(1)
+  const earR = makeEar(-1)
+  head.add(earL, earR)
+  body.add(head)
+
+  // ---- legs: two joints each (shoulder -> upper arm, elbow/hock -> forearm + paw)
+  // sections above the pivot stay buried in the body through the full swing
+  const upperGeoF = makeLoft([
+    { x: -0.35, cy: 0, ry: 0.24, rz: 0.22 },
+    { x: -0.15, cy: 0, ry: 0.21, rz: 0.19 },
+    { x: 0, cy: 0, ry: 0.19, rz: 0.175 },
+    { x: 0.3, cy: 0, ry: 0.15, rz: 0.14 },
+    { x: 0.55, cy: 0, ry: 0.12, rz: 0.115 }
+  ], 36)
+  upperGeoF.rotateZ(-Math.PI / 2)
+  const upperGeoH = makeLoft([
+    { x: -0.3, cy: 0, ry: 0.25, rz: 0.23 },
+    { x: -0.15, cy: 0, ry: 0.22, rz: 0.20 },
+    { x: 0, cy: 0, ry: 0.19, rz: 0.175 },
+    { x: 0.3, cy: 0, ry: 0.15, rz: 0.14 },
+    { x: 0.55, cy: 0, ry: 0.12, rz: 0.115 }
+  ], 36)
+  upperGeoH.rotateZ(-Math.PI / 2)
+  const cannonGeo = makeLoft([
+    { x: 0, cy: 0, ry: 0.105, rz: 0.10 },
+    { x: 0.25, cy: 0, ry: 0.085, rz: 0.082 },
+    { x: 0.45, cy: 0, ry: 0.075, rz: 0.078 }
+  ], 30)
+  cannonGeo.rotateZ(-Math.PI / 2)
+  const jointGeo = new THREE.SphereGeometry(0.105, 18, 14)
+  const pawGeo = new THREE.SphereGeometry(0.155, 18, 14)
+  const toeGeo = new THREE.SphereGeometry(0.05, 10, 8)
+  const legDefs = [
+    { name: 'frontLeft', x: 0.6, z: 0.34, hind: false, amp: 0.42 },
+    { name: 'frontRight', x: 0.6, z: -0.34, hind: false, amp: 0.42 },
+    { name: 'backLeft', x: -0.6, z: 0.36, hind: true, amp: 0.42 },
+    { name: 'backRight', x: -0.6, z: -0.36, hind: true, amp: 0.42 }
+  ]
+  const legs = []
+  legDefs.forEach((ld) => {
+    const hip = new THREE.Group()
+    hip.position.set(ld.x, 1.05, ld.z)
+    hip.add(new THREE.Mesh(ld.hind ? upperGeoH : upperGeoF, furMat))
+    const lower = new THREE.Group()
+    lower.position.set(0, -0.55, 0)
+    const base = ld.hind ? 0.42 : 0
+    lower.rotation.z = base
+    lower.add(new THREE.Mesh(cannonGeo, furMat))
+    lower.add(new THREE.Mesh(jointGeo, furMat))
+    const paw = new THREE.Mesh(pawGeo, furMat)
+    paw.scale.set(1.15, 0.55, 1.35)
+    paw.position.set(0.08, -0.42, 0.02)
+    lower.add(paw)
+    for (const [tx, tz] of [[0.17, 0], [0.16, 0.075], [0.16, -0.075]]) {
+      const toe = new THREE.Mesh(toeGeo, furMat)
+      toe.position.set(tx, -0.47, tz + 0.02)
+      lower.add(toe)
+    }
+    hip.add(lower)
+    hip.userData = { name: ld.name, lower, base, hind: ld.hind, amp: ld.amp }
+    g.add(hip)
+    legs.push(hip)
+  })
+
   // small stub tail: lofted, base buried in the rump, pointing down-back
-  const tailGeo = makeLoft([
+  const tail = new THREE.Group()
+  tail.position.set(-0.72, 0.88, 0)
+  const tailMesh = new THREE.Mesh(makeLoft([
     { x: 0, cy: 0, ry: 0.1, rz: 0.1 },
     { x: 0.1, cy: 0, ry: 0.08, rz: 0.075 },
     { x: 0.18, cy: 0, ry: 0.05, rz: 0.045 }
-  ], 10)
-  const tail = new THREE.Mesh(tailGeo, furMat)
-  tail.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, -0.45, 0).normalize())
-  tail.position.set(-0.72, 0.88, 0)
+  ], 10), furMat)
+  tailMesh.quaternion.setFromUnitVectors(X_AXIS, new THREE.Vector3(-1, -0.45, 0).normalize())
+  tail.add(tailMesh)
   g.add(tail)
   g.traverse((c) => { if (c.isMesh) c.castShadow = true })
-  return { group: g, legs }
+  return { group: g, legs, body, head, earL, earR, tail }
 }
 
 function makeFox(kit) {
@@ -641,102 +802,182 @@ function makeFox(kit) {
 
 function makeReindeer(withAntlers, kit) {
   const g = new THREE.Group()
-  const { fur: furMat, dark, antler } = kit
-  // one sculpted body: haunches -> long back -> rising neck -> head -> long snout
-  const body = new THREE.Mesh(makeLoft([
-    { x: -0.72, cy: 1.04, ry: 0.28, rz: 0.25 },
-    { x: -0.4, cy: 1.08, ry: 0.33, rz: 0.29 },
-    { x: -0.05, cy: 1.10, ry: 0.35, rz: 0.31 },
-    { x: 0.28, cy: 1.12, ry: 0.33, rz: 0.29 },
-    { x: 0.52, cy: 1.20, ry: 0.24, rz: 0.21 },
-    { x: 0.7, cy: 1.38, ry: 0.17, rz: 0.15 },
-    { x: 0.85, cy: 1.58, ry: 0.15, rz: 0.14 },
-    { x: 1.0, cy: 1.65, ry: 0.13, rz: 0.11 },
-    { x: 1.2, cy: 1.61, ry: 0.085, rz: 0.075 },
-    { x: 1.38, cy: 1.595, ry: 0.04, rz: 0.045 }
-  ], 12), furMat)
+  const X_AXIS = new THREE.Vector3(1, 0, 0)
+  const { fur: furMat, dark, antler, cream, shine } = kit
+  // ---- body: sculpted loft (rump -> haunch -> belly -> brisket -> chest -> rising neck base)
+  const body = new THREE.Group()
+  body.add(new THREE.Mesh(makeLoft([
+    { x: -0.78, cy: 1.02, ry: 0.30, rz: 0.27 },
+    { x: -0.52, cy: 1.08, ry: 0.38, rz: 0.34 },
+    { x: -0.22, cy: 1.12, ry: 0.40, rz: 0.36 },
+    { x: 0.05, cy: 1.10, ry: 0.39, rz: 0.35 },
+    { x: 0.30, cy: 1.12, ry: 0.37, rz: 0.33 },
+    { x: 0.50, cy: 1.22, ry: 0.33, rz: 0.29 },
+    { x: 0.66, cy: 1.38, ry: 0.27, rz: 0.24 },
+    { x: 0.78, cy: 1.52, ry: 0.22, rz: 0.19 },
+    { x: 0.88, cy: 1.64, ry: 0.19, rz: 0.17 }
+  ], 32), furMat))
+  // pale belly patch under the barrel
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 12), cream)
+  belly.scale.set(0.55, 0.26, 0.28)
+  belly.position.set(-0.05, 0.79, 0)
+  body.add(belly)
+  // neck: separate loft rising off the chest
+  body.add(new THREE.Mesh(makeLoft([
+    { x: 0.78, cy: 1.52, ry: 0.20, rz: 0.18 },
+    { x: 0.92, cy: 1.68, ry: 0.17, rz: 0.155 },
+    { x: 1.04, cy: 1.82, ry: 0.15, rz: 0.14 },
+    { x: 1.14, cy: 1.92, ry: 0.13, rz: 0.12 }
+  ], 28), furMat))
   g.add(body)
-  // accents: ears, eyes, nose
-  const earGeo = new THREE.ConeGeometry(0.07, 0.16, 6)
-  const innerGeo = new THREE.ConeGeometry(0.045, 0.1, 5)
-  const earL = new THREE.Mesh(earGeo, furMat)
-  earL.position.set(0.88, 1.8, 0.13)
-  earL.rotation.z = -0.7
-  const earR = earL.clone()
-  earR.position.z = -0.13
-  earR.rotation.z = 0.7
-  const innerL = new THREE.Mesh(innerGeo, dark)
-  innerL.position.set(0.9, 1.79, 0.15)
-  innerL.rotation.z = -0.7
-  const innerR = innerL.clone()
-  innerR.position.z = -0.15
-  innerR.rotation.z = 0.7
-  const eyeGeo = new THREE.SphereGeometry(0.028, 8, 6)
+
+  // ---- head: group pivoted at the neck base so it can bob and look around
+  const head = new THREE.Group()
+  head.position.set(1.14, 1.92, 0)
+  head.add(new THREE.Mesh(makeLoft([
+    { x: -0.06, cy: 0, ry: 0.15, rz: 0.14 },
+    { x: 0.04, cy: 0.01, ry: 0.145, rz: 0.135 },
+    { x: 0.16, cy: 0.005, ry: 0.12, rz: 0.105 },
+    { x: 0.30, cy: 0, ry: 0.09, rz: 0.08 },
+    { x: 0.42, cy: -0.005, ry: 0.07, rz: 0.065 },
+    { x: 0.52, cy: -0.01, ry: 0.055, rz: 0.052 }
+  ], 28), furMat))
+  const throat = new THREE.Mesh(new THREE.SphereGeometry(0.07, 18, 12), cream)
+  throat.scale.set(0.6, 0.45, 0.5)
+  throat.position.set(0.28, -0.07, 0)
+  head.add(throat)
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.045, 20, 14), dark)
+  nose.scale.set(0.75, 0.85, 1.0)
+  nose.position.set(0.545, -0.012, 0)
+  head.add(nose)
+  const nostrilGeo = new THREE.SphereGeometry(0.012, 10, 8)
+  const nostrilL = new THREE.Mesh(nostrilGeo, dark)
+  nostrilL.position.set(0.56, 0.0, 0.026)
+  const nostrilR = nostrilL.clone()
+  nostrilR.position.z = -0.026
+  head.add(nostrilL, nostrilR)
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.014, 0.07), dark)
+  mouth.position.set(0.5, -0.06, 0)
+  head.add(mouth)
+  const eyeGeo = new THREE.SphereGeometry(0.03, 24, 16)
+  const shineGeo = new THREE.SphereGeometry(0.01, 12, 8)
   const eyeL = new THREE.Mesh(eyeGeo, dark)
-  eyeL.position.set(1.06, 1.72, 0.1)
+  eyeL.position.set(0.12, 0.055, 0.12)
   const eyeR = eyeL.clone()
-  eyeR.position.z = -0.1
-  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.038, 8, 6), dark)
-  nose.position.set(1.4, 1.6, 0)
-  g.add(earL, earR, innerL, innerR, eyeL, eyeR, nose)
+  eyeR.position.z = -0.12
+  const shineL = new THREE.Mesh(shineGeo, shine)
+  shineL.position.set(0.132, 0.066, 0.13)
+  const shineR = shineL.clone()
+  shineR.position.z = -0.13
+  head.add(eyeL, eyeR, shineL, shineR)
+  // large horizontal ears: flat tapered loft with a dark inner surface
+  const earOuterGeo = makeLoft([
+    { x: 0, cy: 0, ry: 0.05, rz: 0.015 },
+    { x: 0.12, cy: 0, ry: 0.065, rz: 0.021 },
+    { x: 0.26, cy: 0, ry: 0.048, rz: 0.014 },
+    { x: 0.38, cy: 0, ry: 0.01, rz: 0.007 }
+  ], 16)
+  const earInnerGeo = makeLoft([
+    { x: 0.03, cy: 0, ry: 0.038, rz: 0.012 },
+    { x: 0.14, cy: 0, ry: 0.046, rz: 0.015 },
+    { x: 0.28, cy: 0, ry: 0.02, rz: 0.008 }
+  ], 14)
+  const makeEar = (side) => {
+    const ear = new THREE.Group()
+    ear.position.set(0.0, 0.12, 0.115 * side)
+    ear.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(X_AXIS, new THREE.Vector3(0.5, 0.3, 0.82 * side).normalize()))
+    const outer = new THREE.Mesh(earOuterGeo, furMat)
+    const inner = new THREE.Mesh(earInnerGeo, dark)
+    inner.position.z = -0.01 * side
+    ear.add(outer, inner)
+    return ear
+  }
+  const earL = makeEar(1)
+  const earR = makeEar(-1)
+  head.add(earL, earR)
+  // antlers (adults only): curved crown beam + tines as tube sweeps
   if (withAntlers) {
-    const mainGeo = new THREE.CylinderGeometry(0.02, 0.04, 0.85, 6)
-    const tines = [
-      { geo: new THREE.CylinderGeometry(0.015, 0.028, 0.38, 5), pos: [0.14, 0.5, 0], rot: -0.95 },
-      { geo: new THREE.CylinderGeometry(0.012, 0.022, 0.3, 5), pos: [-0.1, 0.55, 0], rot: 0.75 },
-      { geo: new THREE.CylinderGeometry(0.01, 0.018, 0.24, 5), pos: [0.06, 0.68, 0], rot: -0.65 }
-    ]
-    for (const side of [1, -1]) {
-      const branch = new THREE.Group()
-      branch.position.set(0.92, 1.82, side * 0.11)
-      branch.rotation.z = -0.2
-      branch.rotation.x = side * 0.25
-      const main = new THREE.Mesh(mainGeo, antler)
-      main.position.y = 0.42
-      branch.add(main)
-      for (const t of tines) {
-        const tine = new THREE.Mesh(t.geo, antler)
-        tine.position.set(...t.pos)
-        tine.rotation.z = t.rot
-        branch.add(tine)
+    const addTube = (pts, r) => {
+      const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], p[1], p[2])))
+      head.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 14, r, 12), antler))
+    }
+    for (const s of [1, -1]) {
+      addTube([[0.02, 0.12, 0.11 * s], [-0.02, 0.4, 0.12 * s], [-0.14, 0.66, 0.09 * s], [-0.28, 0.8, 0.03 * s], [-0.3, 0.68, -0.02 * s], [-0.2, 0.56, -0.06 * s]], 0.026)
+      addTube([[0.0, 0.2, 0.13 * s], [0.1, 0.3, 0.14 * s], [0.2, 0.32, 0.12 * s]], 0.018)
+      addTube([[-0.08, 0.5, 0.1 * s], [-0.2, 0.58, 0.08 * s], [-0.3, 0.6, 0.06 * s]], 0.015)
+      addTube([[-0.18, 0.72, 0.05 * s], [-0.3, 0.8, 0.02 * s], [-0.38, 0.76, -0.02 * s]], 0.013)
+      addTube([[-0.26, 0.62, -0.04 * s], [-0.3, 0.5, -0.07 * s]], 0.01)
+      for (const [jx, jy, jz] of [[-0.08, 0.5, 0.1], [-0.18, 0.72, 0.05], [0.0, 0.2, 0.13]]) {
+        const joint = new THREE.Mesh(new THREE.SphereGeometry(0.028, 14, 10), antler)
+        joint.position.set(jx, jy, jz * s)
+        head.add(joint)
       }
-      g.add(branch)
     }
   }
+  body.add(head)
+
+  // ---- legs: two joints each (hip -> thigh, hock/knee -> cannon + dark hoof)
+  // sections above the pivot stay buried in the body through the full swing
+  const thighGeo = makeLoft([
+    { x: -0.3, cy: 0, ry: 0.15, rz: 0.14 },
+    { x: -0.15, cy: 0, ry: 0.13, rz: 0.12 },
+    { x: 0, cy: 0, ry: 0.115, rz: 0.108 },
+    { x: 0.3, cy: 0, ry: 0.085, rz: 0.08 },
+    { x: 0.5, cy: 0, ry: 0.07, rz: 0.068 }
+  ], 28)
+  thighGeo.rotateZ(-Math.PI / 2)
+  const cannonGeo = makeLoft([
+    { x: 0, cy: 0, ry: 0.068, rz: 0.064 },
+    { x: 0.22, cy: 0, ry: 0.052, rz: 0.05 },
+    { x: 0.42, cy: 0, ry: 0.048, rz: 0.05 }
+  ], 24)
+  cannonGeo.rotateZ(-Math.PI / 2)
+  const kneeGeo = new THREE.SphereGeometry(0.06, 16, 12)
+  const hoofGeo = makeLoft([
+    { x: 0, cy: 0, ry: 0.05, rz: 0.042 },
+    { x: 0.05, cy: 0, ry: 0.055, rz: 0.05 },
+    { x: 0.1, cy: 0, ry: 0.045, rz: 0.058 }
+  ], 20)
+  hoofGeo.rotateZ(-Math.PI / 2)
+  const legDefs = [
+    { name: 'frontLeft', x: 0.45, z: 0.18, hind: false, amp: 0.42 },
+    { name: 'frontRight', x: 0.45, z: -0.18, hind: false, amp: 0.42 },
+    { name: 'backLeft', x: -0.5, z: 0.19, hind: true, amp: 0.5 },
+    { name: 'backRight', x: -0.5, z: -0.19, hind: true, amp: 0.5 }
+  ]
+  const legs = []
+  legDefs.forEach((ld) => {
+    const hip = new THREE.Group()
+    hip.position.set(ld.x, 0.95, ld.z)
+    hip.add(new THREE.Mesh(thighGeo, furMat))
+    const lower = new THREE.Group()
+    lower.position.set(0, -0.5, 0)
+    const base = ld.hind ? 0.42 : 0
+    lower.rotation.z = base
+    lower.add(new THREE.Mesh(cannonGeo, furMat))
+    lower.add(new THREE.Mesh(kneeGeo, furMat))
+    const hoof = new THREE.Mesh(hoofGeo, dark)
+    hoof.position.set(0.01, -0.36, 0)
+    lower.add(hoof)
+    hip.add(lower)
+    hip.userData = { name: ld.name, lower, base, hind: ld.hind, amp: ld.amp }
+    g.add(hip)
+    legs.push(hip)
+  })
+
   // small tail: lofted stub, base buried in the rump, pointing back
-  const tailGeo = makeLoft([
+  const tail = new THREE.Group()
+  tail.position.set(-0.56, 1.16, 0)
+  const tailMesh = new THREE.Mesh(makeLoft([
     { x: 0, cy: 0, ry: 0.08, rz: 0.08 },
     { x: 0.09, cy: 0.01, ry: 0.06, rz: 0.055 },
     { x: 0.16, cy: 0.03, ry: 0.035, rz: 0.03 }
-  ], 10)
-  const tail = new THREE.Mesh(tailGeo, furMat)
-  tail.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, 0.25, 0).normalize())
-  tail.position.set(-0.56, 1.16, 0)
+  ], 10), furMat)
+  tailMesh.quaternion.setFromUnitVectors(X_AXIS, new THREE.Vector3(-1, 0.25, 0).normalize())
+  tail.add(tailMesh)
   g.add(tail)
-  // legs: long thin lofted columns with dark hooves, hip buried in the body
-  const legGeo = makeLoft([
-    { x: -0.32, cy: 0, ry: 0.14, rz: 0.135 },
-    { x: -0.15, cy: 0, ry: 0.12, rz: 0.115 },
-    { x: 0, cy: 0, ry: 0.1, rz: 0.1 },
-    { x: 0.45, cy: 0, ry: 0.07, rz: 0.07 },
-    { x: 0.75, cy: 0, ry: 0.055, rz: 0.06 },
-    { x: 0.9, cy: 0, ry: 0.05, rz: 0.07 }
-  ], 12)
-  legGeo.rotateZ(-Math.PI / 2)
-  const hoofGeo = new THREE.CylinderGeometry(0.05, 0.058, 0.1, 6)
-  const legs = []
-  for (const [sx, sz] of [[0.45, 0.18], [0.45, -0.18], [-0.5, 0.18], [-0.5, -0.18]]) {
-    const pivot = new THREE.Group()
-    pivot.position.set(sx, 0.95, sz)
-    const leg = new THREE.Mesh(legGeo, furMat)
-    const hoof = new THREE.Mesh(hoofGeo, dark)
-    hoof.position.y = -0.87
-    pivot.add(leg, hoof)
-    g.add(pivot)
-    legs.push(pivot)
-  }
   g.traverse((c) => { if (c.isMesh) c.castShadow = true })
-  return { group: g, legs }
+  return { group: g, legs, body, head, earL, earR, tail }
 }
 
 // ---------- structures ----------
@@ -1613,15 +1854,17 @@ export function useArcticScene(containerRef) {
 
     // ---- animals ----
     {
-      const bearFurTex = makeFurTexture('#f2efe9', 'rgba(160,155,145,0.30)', 'rgba(205,200,190,0.35)')
+      const bearFurTex = makeBearFurTexture()
       const foxFurTex = makeFurTexture('#e9e4d8', 'rgba(150,140,125,0.32)', 'rgba(255,255,255,0.4)')
-      const reinFurTex = makeFurTexture('#6a5140', 'rgba(40,28,18,0.45)', 'rgba(120,95,72,0.4)')
+      const reinFurTex = makeReindeerCoatTexture()
       texAssets.push(bearFurTex, foxFurTex, reinFurTex)
       const darkMat = new THREE.MeshStandardMaterial({ color: 0x2a2622, roughness: 0.7 })
       const antlerMat = new THREE.MeshStandardMaterial({ color: 0x4a3a28, roughness: 0.8 })
-      const bearKit = { fur: new THREE.MeshStandardMaterial({ map: bearFurTex, roughness: 0.9 }), dark: darkMat }
+      const creamMat = new THREE.MeshStandardMaterial({ color: 0xe8ddc8, roughness: 0.85 })
+      const shineMat = new THREE.MeshBasicMaterial({ color: 0xfff6e0 })
+      const bearKit = { fur: new THREE.MeshStandardMaterial({ map: bearFurTex, roughness: 0.9 }), dark: darkMat, cream: creamMat, shine: shineMat }
       const foxKit = { fur: new THREE.MeshStandardMaterial({ map: foxFurTex, roughness: 0.85 }), dark: darkMat }
-      const reinKit = { fur: new THREE.MeshStandardMaterial({ map: reinFurTex, roughness: 0.9 }), dark: darkMat, antler: antlerMat }
+      const reinKit = { fur: new THREE.MeshStandardMaterial({ map: reinFurTex, roughness: 0.9 }), dark: darkMat, antler: antlerMat, cream: creamMat, shine: shineMat }
 
       const placed = []
       const spawn = (xMax, minDist) => {
@@ -1639,9 +1882,11 @@ export function useArcticScene(containerRef) {
         scene.add(b.group)
         bears.push({
           group: b.group, legs: b.legs,
+          body: b.body, head: b.head, earL: b.earL, earR: b.earR, tail: b.tail,
           pos: new THREE.Vector3(p.x, p.h, p.z),
           target: new THREE.Vector3(),
-          state: 'idle', idle: 1 + Math.random() * 4, phase: Math.random() * 10
+          state: 'idle', idle: 1 + Math.random() * 4, phase: Math.random() * 10,
+          seed: Math.random() * Math.PI * 2, earTwitch: 2 + Math.random() * 5, earAmp: 0
         })
       }
 
@@ -1673,10 +1918,12 @@ export function useArcticScene(containerRef) {
           scene.add(r.group)
           reindeer.push({
             group: r.group, legs: r.legs,
+            body: r.body, head: r.head, earL: r.earL, earR: r.earR, tail: r.tail,
             pos: new THREE.Vector3(p.x, p.h, p.z),
             target: new THREE.Vector3(),
             state: 'idle', idle: 2 + Math.random() * 5,
-            speed: adult ? 0.9 : 1.1
+            speed: adult ? 0.9 : 1.1,
+            seed: Math.random() * Math.PI * 2, earTwitch: 2 + Math.random() * 5, earAmp: 0
           })
         }
       }
@@ -1771,13 +2018,44 @@ export function useArcticScene(containerRef) {
       })
     }
 
+    // two-joint gait for bear/reindeer: diagonal pairs swing at the hip, the
+    // lower leg counter-bends (front knee flexes, hind hock kicks back)
+    function gait2(legs, phase) {
+      legs.forEach((leg, i) => {
+        const ud = leg.userData
+        const p = i % 4 === 0 || i % 4 === 3 ? phase : phase + Math.PI
+        const s = Math.sin(p)
+        leg.rotation.z = s * ud.amp
+        ud.lower.rotation.z = ud.base + (ud.hind ? -Math.max(0, s) * 0.8 : s * 0.3)
+      })
+    }
+
+    function settleLegs(legs, settle) {
+      legs.forEach((leg) => {
+        leg.rotation.z += (0 - leg.rotation.z) * settle
+        const ud = leg.userData
+        ud.lower.rotation.z += (ud.base - ud.lower.rotation.z) * settle
+      })
+    }
+
     function updateAnimals(elapsed, delta) {
       // polar bears
       for (const bear of bears) {
+        const settle = Math.min(1, delta * 5)
         if (bear.state === 'idle') {
           bear.idle -= delta
-          bear.legs.forEach((leg) => { leg.rotation.z *= 0.9 })
-          bear.group.position.y = bear.pos.y + Math.sin(elapsed * 1.1 + bear.phase) * 0.015
+          settleLegs(bear.legs, settle)
+          bear.body.position.y += (Math.sin(elapsed * 1.2 + bear.phase) * 0.02 - bear.body.position.y) * settle
+          bear.body.rotation.z += (0 - bear.body.rotation.z) * settle
+          bear.tail.rotation.z += (0 - bear.tail.rotation.z) * settle
+          bear.head.rotation.x += (0.04 - bear.head.rotation.x) * settle
+          bear.head.rotation.y = Math.sin(elapsed * 0.3 + bear.phase) * 0.22
+          bear.earTwitch -= delta
+          if (bear.earTwitch <= 0) { bear.earTwitch = 3 + Math.random() * 6; bear.earAmp = 1 }
+          bear.earAmp *= Math.max(0, 1 - delta * 8)
+          const tw = Math.sin(elapsed * 30) * bear.earAmp * 0.15
+          bear.earL.rotation.y = tw
+          bear.earR.rotation.y = -tw * 0.7
           if (bear.idle <= 0) {
             bear.state = 'walk'
             pickDryTarget(bear, 55)
@@ -1791,7 +2069,13 @@ export function useArcticScene(containerRef) {
           } else {
             bear.group.position.copy(bear.pos)
             faceToward(bear.group, bear, 3)
-            walkLegs(bear.legs, elapsed * 2.2 + bear.phase)
+            const gaitPhase = elapsed * 2.2 + bear.phase
+            gait2(bear.legs, gaitPhase)
+            bear.body.position.y = Math.sin(gaitPhase * 2) * 0.035
+            bear.body.rotation.z = Math.sin(gaitPhase * 2 + 0.7) * 0.01
+            bear.head.rotation.x = 0.03 + Math.sin(gaitPhase) * 0.03
+            bear.head.rotation.y = Math.sin(elapsed * 0.4 + bear.phase) * 0.05
+            bear.tail.rotation.z = Math.sin(gaitPhase * 2 + 1) * 0.15
           }
         }
       }
@@ -1821,9 +2105,22 @@ export function useArcticScene(containerRef) {
 
       // reindeer
       for (const r of reindeer) {
+        const settle = Math.min(1, delta * 5)
         if (r.state === 'idle') {
           r.idle -= delta
-          r.legs.forEach((leg) => { leg.rotation.z *= 0.9 })
+          settleLegs(r.legs, settle)
+          r.body.position.y += (Math.sin(elapsed * 1.6 + r.seed) * 0.015 - r.body.position.y) * settle
+          r.body.rotation.z += (0 - r.body.rotation.z) * settle
+          r.tail.rotation.z += (0 - r.tail.rotation.z) * settle
+          r.tail.rotation.y *= 1 - settle
+          r.head.rotation.x += (0.05 - r.head.rotation.x) * settle
+          r.head.rotation.y = Math.sin(elapsed * 0.35 + r.seed) * 0.25
+          r.earTwitch -= delta
+          if (r.earTwitch <= 0) { r.earTwitch = 3 + Math.random() * 6; r.earAmp = 1 }
+          r.earAmp *= Math.max(0, 1 - delta * 8)
+          const tw = Math.sin(elapsed * 34) * r.earAmp * 0.18
+          r.earL.rotation.y = Math.sin(elapsed * 0.9 + r.seed) * 0.06 + tw
+          r.earR.rotation.y = -Math.sin(elapsed * 0.9 + r.seed + 0.7) * 0.06 + tw * 0.6
           if (r.idle <= 0) {
             r.state = 'walk'
             pickDryTarget(r, 60)
@@ -1837,7 +2134,14 @@ export function useArcticScene(containerRef) {
           } else {
             r.group.position.copy(r.pos)
             faceToward(r.group, r, 2.5)
-            walkLegs(r.legs, elapsed * r.speed * 2.2 + r.pos.x * 0.3)
+            const gaitPhase = elapsed * r.speed * 2.2 + r.pos.x * 0.3
+            gait2(r.legs, gaitPhase)
+            r.body.position.y = Math.sin(gaitPhase * 2) * 0.04
+            r.body.rotation.z = Math.sin(gaitPhase * 2 + 0.7) * 0.015
+            r.head.rotation.x = 0.04 + Math.sin(gaitPhase) * 0.03
+            r.head.rotation.y = Math.sin(elapsed * 0.5 + r.seed) * 0.05
+            r.tail.rotation.z = Math.sin(gaitPhase * 2 + 1) * 0.18
+            r.tail.rotation.y = Math.sin(elapsed * 2.4 + r.seed) * 0.1
           }
         }
       }
