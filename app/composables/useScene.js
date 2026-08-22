@@ -371,6 +371,49 @@ function makeFawnTexture() {
   }, 1)
 }
 
+// adult deer roan coat: warm fawn-brown base, mottled grizzle, fine fur grain
+function makeDeerCoatTexture() {
+  return makeTileTexture(256, (ctx, size) => {
+    ctx.fillStyle = '#9a6a40'
+    ctx.fillRect(0, 0, size, size)
+    tileBlobs(ctx, size, 90, 6, 18, [
+      'rgba(126,86,48,0.4)', 'rgba(150,106,60,0.45)', 'rgba(92,60,34,0.3)'
+    ])
+    for (let i = 0; i < 1400; i++) {
+      const x = Math.random() * size
+      const y = Math.random() * size
+      const len = 3 + Math.random() * 7
+      const l = Math.random()
+      ctx.strokeStyle = l < 0.45 ? 'rgba(74,48,26,0.2)' : l < 0.8 ? 'rgba(176,132,84,0.16)' : 'rgba(214,180,136,0.12)'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(x, y)
+      ctx.lineTo(x + (Math.random() - 0.5) * 2, y + len)
+      ctx.stroke()
+    }
+    tileSpeckle(ctx, size, 500, ['rgba(60,38,20,0.18)', 'rgba(220,190,150,0.1)'], 1, 2)
+  }, 1)
+}
+
+// antler bone: pale tan with vertical ridges and darker growth mottling
+function makeAntlerTexture() {
+  return makeTileTexture(128, (ctx, size) => {
+    ctx.fillStyle = '#b9a488'
+    ctx.fillRect(0, 0, size, size)
+    for (let i = 0; i < 26; i++) {
+      const x = Math.random() * size
+      ctx.strokeStyle = `rgba(96,76,54,${0.15 + Math.random() * 0.3})`
+      ctx.lineWidth = 1 + Math.random() * 2.5
+      ctx.beginPath()
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x + (Math.random() - 0.5) * 10, size)
+      ctx.stroke()
+    }
+    tileBlobs(ctx, size, 30, 3, 9, ['rgba(140,116,88,0.35)', 'rgba(226,210,186,0.3)'])
+    tileSpeckle(ctx, size, 300, ['rgba(80,62,44,0.2)'], 1, 2)
+  }, 1)
+}
+
 // squirrel coat: warm rust base with mottled undertone and fine grain
 function makeSquirrelFurTexture() {
   return makeTileTexture(256, (ctx, size) => {
@@ -1906,116 +1949,220 @@ export function useScene(containerRef) {
     const { scale = 1, colorMul = 1, antlers = false, fawn = false } = config
     const deerGroup = new THREE.Group()
     const deerLegs = []
+    const seed = Math.random() * Math.PI * 2
+    const X_AXIS = new THREE.Vector3(1, 0, 0)
 
-    let fawnTex = null
-    const bodyMat = fawn
-      ? (() => { fawnTex = makeFawnTexture(); texAssets.push(fawnTex); return new THREE.MeshStandardMaterial({ map: fawnTex, roughness: 0.85 }) })()
-      : new THREE.MeshStandardMaterial({ color: new THREE.Color(0x8b5e3c).multiplyScalar(colorMul), roughness: 0.8 })
-    const darkMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x5c4033).multiplyScalar(colorMul), roughness: 0.9 })
-    const lightMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0xe8d9c4).multiplyScalar(colorMul), roughness: 0.8 })
-    const noseMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x3d2b1f).multiplyScalar(colorMul), roughness: 0.7 })
-    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.3 })
+    // ---- materials ----
+    const coatTex = fawn ? makeFawnTexture() : makeDeerCoatTexture()
+    texAssets.push(coatTex)
+    const bodyMat = new THREE.MeshStandardMaterial({
+      map: coatTex,
+      roughness: 0.85,
+      color: fawn ? new THREE.Color(0xffffff) : new THREE.Color(0xffffff).multiplyScalar(colorMul)
+    })
+    const legMat = new THREE.MeshStandardMaterial({ map: coatTex, roughness: 0.9, color: new THREE.Color(0xffffff).multiplyScalar(0.72 * (fawn ? 1 : colorMul)) })
+    const creamMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0xe9dcc4).multiplyScalar(colorMul), roughness: 0.85 })
+    const darkMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x4a3226).multiplyScalar(colorMul), roughness: 0.8 })
+    const noseMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x33241b).multiplyScalar(colorMul), roughness: 0.5 })
+    const hoofMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x2b1f17).multiplyScalar(colorMul), roughness: 0.45 })
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x241812, roughness: 0.25 })
+    const shineMat = new THREE.MeshBasicMaterial({ color: 0xfff6e0 })
+    const innerEarMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0xc9a68a).multiplyScalar(colorMul), roughness: 0.9 })
 
-    // Body: single loft — rump -> shoulder hump -> neck -> head -> snout
-    const body = new THREE.Mesh(makeLoft([
-      { x: -0.85, cy: 2.25, ry: 0.62, rz: 0.5 },
-      { x: -0.45, cy: 2.35, ry: 0.66, rz: 0.52 },
-      { x: 0.0, cy: 2.5, ry: 0.6, rz: 0.5 },
-      { x: 0.5, cy: 2.62, ry: 0.56, rz: 0.48 },
-      { x: 0.9, cy: 2.85, ry: 0.34, rz: 0.3 },
-      { x: 1.2, cy: 3.1, ry: 0.24, rz: 0.22 },
-      { x: 1.45, cy: 3.35, ry: 0.22, rz: 0.2 },
-      { x: 1.75, cy: 3.2, ry: 0.14, rz: 0.16 },
-      { x: 1.95, cy: 3.18, ry: 0.1, rz: 0.12 }
-    ], 12), bodyMat)
+    // ---- body: sculpted loft (rump -> haunch -> belly -> chest -> withers) ----
+    const body = new THREE.Group()
+    body.add(new THREE.Mesh(makeLoft([
+      { x: -1.05, cy: 2.12, ry: 0.46, rz: 0.40 },
+      { x: -0.85, cy: 2.22, ry: 0.55, rz: 0.47 },
+      { x: -0.55, cy: 2.28, ry: 0.55, rz: 0.48 },
+      { x: -0.25, cy: 2.24, ry: 0.52, rz: 0.47 },
+      { x: 0.05, cy: 2.18, ry: 0.50, rz: 0.46 },
+      { x: 0.35, cy: 2.26, ry: 0.50, rz: 0.46 },
+      { x: 0.62, cy: 2.38, ry: 0.50, rz: 0.44 },
+      { x: 0.82, cy: 2.48, ry: 0.46, rz: 0.40 },
+      { x: 0.95, cy: 2.58, ry: 0.40, rz: 0.35 },
+      { x: 1.02, cy: 2.68, ry: 0.33, rz: 0.30 }
+    ], 32), bodyMat))
+    // white rump patch
+    const rump = new THREE.Mesh(new THREE.SphereGeometry(0.32, 20, 14), creamMat)
+    rump.scale.set(0.4, 0.78, 0.62)
+    rump.position.set(-0.95, 2.42, 0)
+    body.add(rump)
+    // neck: separate loft rising off the chest
+    body.add(new THREE.Mesh(makeLoft([
+      { x: 0.78, cy: 2.42, ry: 0.42, rz: 0.40 },
+      { x: 0.98, cy: 2.60, ry: 0.30, rz: 0.30 },
+      { x: 1.12, cy: 2.78, ry: 0.25, rz: 0.25 },
+      { x: 1.24, cy: 2.94, ry: 0.22, rz: 0.22 },
+      { x: 1.34, cy: 3.06, ry: 0.20, rz: 0.20 },
+      { x: 1.44, cy: 3.14, ry: 0.185, rz: 0.185 }
+    ], 24), bodyMat))
     deerGroup.add(body)
 
-    // Ears
-    const earGeo = new THREE.ConeGeometry(0.11, 0.3, 6)
-    const earL = new THREE.Mesh(earGeo, bodyMat)
-    earL.position.set(1.28, 3.62, 0.22)
-    earL.rotation.set(0.15, 0, -0.5)
-    const earR = new THREE.Mesh(earGeo, bodyMat)
-    earR.position.set(1.28, 3.62, -0.22)
-    earR.rotation.set(0.15, 0, 0.5)
-    deerGroup.add(earL, earR)
-
-    // Eyes
-    const eyeGeo = new THREE.SphereGeometry(0.055, 8, 6)
+    // ---- head: group pivoted at the neck base so it can bob and look around ----
+    const head = new THREE.Group()
+    head.position.set(1.44, 3.14, 0)
+    head.add(new THREE.Mesh(makeLoft([
+      { x: -0.06, cy: 0.0, ry: 0.19, rz: 0.185 },
+      { x: 0.06, cy: 0.015, ry: 0.195, rz: 0.18 },
+      { x: 0.18, cy: 0.02, ry: 0.17, rz: 0.15 },
+      { x: 0.32, cy: 0.01, ry: 0.13, rz: 0.115 },
+      { x: 0.45, cy: -0.005, ry: 0.095, rz: 0.085 },
+      { x: 0.56, cy: -0.015, ry: 0.075, rz: 0.07 },
+      { x: 0.64, cy: -0.02, ry: 0.065, rz: 0.062 }
+    ], 28), bodyMat))
+    const throat = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 12), creamMat)
+    throat.scale.set(0.65, 0.42, 0.55)
+    throat.position.set(0.4, -0.085, 0)
+    head.add(throat)
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.05, 20, 14), noseMat)
+    nose.scale.set(0.75, 0.8, 1.05)
+    nose.position.set(0.645, -0.02, 0)
+    head.add(nose)
+    const nostrilGeo = new THREE.SphereGeometry(0.013, 10, 8)
+    const nostrilL = new THREE.Mesh(nostrilGeo, darkMat)
+    nostrilL.position.set(0.66, -0.006, 0.028)
+    const nostrilR = nostrilL.clone()
+    nostrilR.position.z = -0.028
+    head.add(nostrilL, nostrilR)
+    const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.016, 0.085), darkMat)
+    mouth.position.set(0.615, -0.075, 0)
+    head.add(mouth)
+    const eyeGeo = new THREE.SphereGeometry(0.04, 24, 16)
+    const shineGeo = new THREE.SphereGeometry(0.013, 14, 10)
     const eyeL = new THREE.Mesh(eyeGeo, eyeMat)
-    eyeL.position.set(1.42, 3.45, 0.2)
-    const eyeR = new THREE.Mesh(eyeGeo, eyeMat)
-    eyeR.position.set(1.42, 3.45, -0.2)
-    deerGroup.add(eyeL, eyeR)
+    eyeL.position.set(0.16, 0.055, 0.16)
+    const eyeR = eyeL.clone()
+    eyeR.position.z = -0.16
+    const shineL = new THREE.Mesh(shineGeo, shineMat)
+    shineL.position.set(0.175, 0.068, 0.172)
+    const shineR = shineL.clone()
+    shineR.position.z = -0.172
+    head.add(eyeL, eyeR, shineL, shineR)
 
-    // Nose
-    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), noseMat)
-    nose.position.set(1.97, 3.18, 0)
-    nose.scale.set(0.8, 1, 1.1)
-    deerGroup.add(nose)
-
-    // Antlers (adults only)
-    if (antlers) {
-      const antlerMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x6b5b4f).multiplyScalar(colorMul), roughness: 0.85 })
-      const antlerPositions = [
-        { pos: [1.2, 3.75, 0.15], rot: [0, 0, -0.2], scale: [0.06, 0.7, 0.06] },
-        { pos: [1.2, 3.75, -0.15], rot: [0, 0, 0.2], scale: [0.06, 0.7, 0.06] },
-        // Branches
-        { pos: [1.3, 3.95, 0.2], rot: [0.3, 0, -0.5], scale: [0.05, 0.3, 0.05] },
-        { pos: [1.3, 3.95, -0.2], rot: [0.3, 0, 0.5], scale: [0.05, 0.3, 0.05] },
-        { pos: [1.15, 4.05, 0.18], rot: [-0.2, 0, -0.3], scale: [0.04, 0.2, 0.04] },
-        { pos: [1.15, 4.05, -0.18], rot: [-0.2, 0, 0.3], scale: [0.04, 0.2, 0.04] },
-      ]
-      antlerPositions.forEach(a => {
-        const antler = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.05, 1, 6), antlerMat)
-        antler.position.set(...a.pos)
-        antler.rotation.set(...a.rot)
-        antler.scale.set(...a.scale)
-        deerGroup.add(antler)
-      })
+    // ears: flat tapered loft with a lighter inner surface
+    const earOuterGeo = makeLoft([
+      { x: 0, cy: 0, ry: 0.045, rz: 0.014 },
+      { x: 0.14, cy: 0, ry: 0.055, rz: 0.02 },
+      { x: 0.3, cy: 0, ry: 0.035, rz: 0.013 },
+      { x: 0.42, cy: 0, ry: 0.008, rz: 0.006 }
+    ], 14)
+    const earInnerGeo = makeLoft([
+      { x: 0.03, cy: 0, ry: 0.032, rz: 0.011 },
+      { x: 0.15, cy: 0, ry: 0.038, rz: 0.014 },
+      { x: 0.3, cy: 0, ry: 0.02, rz: 0.008 }
+    ], 12)
+    const makeEar = (zSide) => {
+      const ear = new THREE.Group()
+      ear.position.set(0.02, 0.17, 0.13 * zSide)
+      ear.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(X_AXIS, new THREE.Vector3(-0.35, 0.75, 0.55 * zSide).normalize()))
+      const outer = new THREE.Mesh(earOuterGeo, bodyMat)
+      const inner = new THREE.Mesh(earInnerGeo, innerEarMat)
+      inner.position.z = -0.012 * zSide
+      ear.add(outer, inner)
+      return ear
     }
+    const earL = makeEar(1)
+    const earR = makeEar(-1)
+    if (fawn) { earL.scale.setScalar(0.8); earR.scale.setScalar(0.8) }
+    head.add(earL, earR)
 
-    // Legs: lofted hip -> knee -> ankle -> foot, pivoted at the hip.
-    // The hip is thick and set high so it is buried inside the body loft (no gap).
-    const legGeo = makeLoft([
-      { x: 0, cy: 0, ry: 0.2, rz: 0.18 },
-      { x: 0.8, cy: 0, ry: 0.12, rz: 0.11 },
-      { x: 1.7, cy: 0, ry: 0.09, rz: 0.08 },
-      { x: 2.2, cy: 0, ry: 0.13, rz: 0.11 }
-    ], 8)
-    legGeo.rotateZ(-Math.PI / 2)
-    const hoofGeo = new THREE.BoxGeometry(0.15, 0.12, 0.17)
-    const legData = [
-      { name: 'frontLeft', x: 0.55, z: 0.28 },
-      { name: 'frontRight', x: 0.55, z: -0.28 },
-      { name: 'backLeft', x: -0.6, z: 0.28 },
-      { name: 'backRight', x: -0.6, z: -0.28 },
+    // antlers (adults only): curved main beam + tines as tube sweeps
+    if (antlers) {
+      const antlerTex = makeAntlerTexture()
+      texAssets.push(antlerTex)
+      const antlerMat = new THREE.MeshStandardMaterial({ map: antlerTex, roughness: 0.7 })
+      const addTube = (pts, r, s) => {
+        const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], p[1], p[2] * s)))
+        head.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 12, r, 14), antlerMat))
+      }
+      for (const s of [1, -1]) {
+        addTube([[0.06, 0.17, 0.14], [0.05, 0.36, 0.16], [-0.03, 0.56, 0.11]], 0.026, s)
+        addTube([[-0.03, 0.56, 0.11], [-0.15, 0.7, 0.05], [-0.28, 0.72, -0.01]], 0.016, s)
+        addTube([[0.01, 0.32, 0.15], [0.08, 0.46, 0.18], [0.04, 0.58, 0.14]], 0.013, s)
+        addTube([[-0.09, 0.5, 0.08], [-0.03, 0.66, 0.03], [-0.12, 0.78, -0.01]], 0.01, s)
+        addTube([[-0.28, 0.72, -0.01], [-0.38, 0.79, -0.05]], 0.008, s)
+        addTube([[-0.27, 0.7, -0.02], [-0.33, 0.72, -0.08]], 0.007, s)
+        const joint = new THREE.Mesh(new THREE.SphereGeometry(0.028, 14, 10), antlerMat)
+        joint.position.set(-0.03, 0.56, 0.11 * s)
+        head.add(joint)
+      }
+    }
+    body.add(head)
+
+    // ---- legs: two joints each (hip pivot -> thigh, knee/hock -> cannon + hoof) ----
+    const thighGeoF = makeLoft([
+      { x: 0, cy: 0, ry: 0.15, rz: 0.135 },
+      { x: 0.45, cy: 0, ry: 0.125, rz: 0.115 },
+      { x: 0.92, cy: 0, ry: 0.095, rz: 0.088 }
+    ], 24)
+    thighGeoF.rotateZ(-Math.PI / 2)
+    const thighGeoH = makeLoft([
+      { x: 0, cy: 0, ry: 0.21, rz: 0.19 },
+      { x: 0.4, cy: 0, ry: 0.17, rz: 0.155 },
+      { x: 0.9, cy: 0, ry: 0.11, rz: 0.1 }
+    ], 26)
+    thighGeoH.rotateZ(-Math.PI / 2)
+    const cannonGeoF = makeLoft([
+      { x: 0, cy: 0, ry: 0.085, rz: 0.08 },
+      { x: 0.45, cy: 0, ry: 0.068, rz: 0.065 },
+      { x: 0.88, cy: 0, ry: 0.055, rz: 0.058 }
+    ], 18)
+    cannonGeoF.rotateZ(-Math.PI / 2)
+    const cannonGeoH = makeLoft([
+      { x: 0, cy: 0, ry: 0.08, rz: 0.075 },
+      { x: 0.45, cy: 0, ry: 0.062, rz: 0.06 },
+      { x: 0.95, cy: 0, ry: 0.05, rz: 0.052 }
+    ], 18)
+    cannonGeoH.rotateZ(-Math.PI / 2)
+    const kneeGeo = new THREE.SphereGeometry(0.082, 18, 12)
+    const hockGeo = new THREE.SphereGeometry(0.088, 18, 12)
+    const hoofGeo = makeLoft([
+      { x: 0, cy: 0, ry: 0.05, rz: 0.042 },
+      { x: 0.05, cy: 0, ry: 0.055, rz: 0.05 },
+      { x: 0.1, cy: 0, ry: 0.045, rz: 0.06 }
+    ], 16)
+    hoofGeo.rotateZ(-Math.PI / 2)
+
+    const legDefs = [
+      { name: 'frontLeft', x: 0.62, y: 1.9, z: 0.27, hind: false },
+      { name: 'frontRight', x: 0.62, y: 1.9, z: -0.27, hind: false },
+      { name: 'backLeft', x: -0.72, y: 1.85, z: 0.3, hind: true },
+      { name: 'backRight', x: -0.72, y: 1.85, z: -0.3, hind: true }
     ]
+    legDefs.forEach(ld => {
+      const hip = new THREE.Group()
+      hip.position.set(ld.x, ld.y, ld.z)
+      hip.add(new THREE.Mesh(ld.hind ? thighGeoH : thighGeoF, legMat))
 
-    legData.forEach(ld => {
-      const leg = new THREE.Group()
-      const upper = new THREE.Mesh(legGeo, darkMat)
-      leg.add(upper)
+      const lower = new THREE.Group()
+      const jointLen = ld.hind ? 0.9 : 0.92
+      lower.position.set(ld.hind ? 0.02 : 0, -jointLen, 0)
+      const baseRot = ld.hind ? 0.42 : 0
+      lower.rotation.z = baseRot
+      lower.add(new THREE.Mesh(ld.hind ? cannonGeoH : cannonGeoF, legMat))
+      const joint = new THREE.Mesh(ld.hind ? hockGeo : kneeGeo, legMat)
+      lower.add(joint)
+      const hoof = new THREE.Mesh(hoofGeo, hoofMat)
+      hoof.position.set(0.01, ld.hind ? -0.93 : -0.88, 0)
+      hoof.userData.hoof = true
+      lower.add(hoof)
+      hip.add(lower)
 
-      const hoof = new THREE.Mesh(hoofGeo, noseMat)
-      hoof.position.y = -2.13
-      leg.add(hoof)
-
-      leg.position.set(ld.x, 2.2, ld.z)
-      leg.userData = { name: ld.name }
-      deerGroup.add(leg)
-      deerLegs.push(leg)
+      hip.userData = { name: ld.name, lower, base: baseRot, hind: ld.hind }
+      deerGroup.add(hip)
+      deerLegs.push(hip)
     })
 
-    // White tail (lofted nub, wags around its base)
-    const tailGeo = makeLoft([
-      { x: 0, cy: 0, ry: 0.13, rz: 0.13 },
-      { x: 0.28, cy: 0.06, ry: 0.1, rz: 0.1 },
-      { x: 0.45, cy: 0.14, ry: 0.06, rz: 0.06 }
-    ], 8)
-    const tail = new THREE.Mesh(tailGeo, lightMat)
-    tail.position.set(-0.85, 2.55, 0)
-    tail.rotation.z = 0.5
+    // white tail: lofted, wags around its base
+    const tail = new THREE.Group()
+    tail.position.set(-1.05, 2.45, 0)
+    tail.add(new THREE.Mesh(makeLoft([
+      { x: 0, cy: 0, ry: 0.1, rz: 0.1 },
+      { x: 0.18, cy: 0, ry: 0.075, rz: 0.075 },
+      { x: 0.34, cy: 0, ry: 0.048, rz: 0.048 }
+    ], 16), creamMat))
+    tail.rotation.z = 0.55
     deerGroup.add(tail)
 
     deerGroup.scale.setScalar(scale)
@@ -2029,6 +2176,9 @@ export function useScene(containerRef) {
     const deer = {
       group: deerGroup,
       body,
+      head,
+      earL,
+      earR,
       legs: deerLegs,
       tail,
       pos: new THREE.Vector3(),
@@ -2037,6 +2187,9 @@ export function useScene(containerRef) {
       idleTime: 1 + Math.random() * 4,
       isFawn: fawn,
       speed: fawn ? 3.8 : 3.0,
+      seed,
+      earTwitch: 2 + Math.random() * 6,
+      earTwitchAmp: 0,
     }
     deerList.push(deer)
     scene.add(deerGroup)
@@ -2072,11 +2225,27 @@ export function useScene(containerRef) {
         deer.target.y = getHeight(deer.target.x, deer.target.z)
       }
 
+      const settle = Math.min(1, delta * 5)
+
       if (deer.state === 'idle') {
         deer.idleTime -= delta
-        deer.body.position.y *= 0.85
-        deer.legs.forEach(leg => { leg.rotation.x *= 0.9 })
-        deer.tail.rotation.x *= 0.9
+        deer.legs.forEach(leg => {
+          leg.rotation.z += (0 - leg.rotation.z) * settle
+          const ud = leg.userData
+          ud.lower.rotation.z += (ud.base - ud.lower.rotation.z) * settle
+        })
+        deer.body.position.y += (Math.sin(elapsed * 1.5 + deer.seed) * 0.012 - deer.body.position.y) * settle
+        deer.body.rotation.z += (0 - deer.body.rotation.z) * settle
+        deer.tail.rotation.z += (0.55 - deer.tail.rotation.z) * settle
+        deer.tail.rotation.y *= 1 - settle
+        deer.head.rotation.x += (0.06 - deer.head.rotation.x) * settle
+        deer.head.rotation.y = Math.sin(elapsed * 0.35 + deer.seed) * 0.28
+        deer.earTwitch -= delta
+        if (deer.earTwitch <= 0) { deer.earTwitch = 3 + Math.random() * 6; deer.earTwitchAmp = 1 }
+        deer.earTwitchAmp *= Math.max(0, 1 - delta * 8)
+        const tw = Math.sin(elapsed * 42) * deer.earTwitchAmp * 0.25
+        deer.earL.rotation.y = Math.sin(elapsed * 0.9 + deer.seed) * 0.08 + tw
+        deer.earR.rotation.y = -Math.sin(elapsed * 0.9 + deer.seed + 0.7) * 0.08 + tw * 0.6
         if (deer.idleTime <= 0) {
           deer.state = 'walking'
           if (!deer.isFawn) pickNewDeerTarget(deer)
@@ -2116,25 +2285,38 @@ export function useScene(containerRef) {
             while (rotDiff < -Math.PI) rotDiff += Math.PI * 2
             deer.group.rotation.y += rotDiff * 3 * delta
 
-            // Legs (walking gait, offset per deer)
-            const walkSpeed = 8
-            const gaitPhase = elapsed * walkSpeed + i * 1.3
-            const legSwing = Math.sin(gaitPhase) * 0.4
-            const legSwing2 = Math.sin(gaitPhase + Math.PI) * 0.4
+            // Legs: diagonal pairs swing around Z (feet track forward/back in
+            // the X-Y plane); the lower leg counter-bends, the hind hock kicks
+            // back as the leg swings forward
+            const walkSpeed = 7.5
+            const gaitPhase = elapsed * walkSpeed + deer.seed
             deer.legs.forEach(leg => {
-              const name = leg.userData.name
-              if (name.startsWith('front')) {
-                leg.rotation.x = name.endsWith('Left') ? legSwing : legSwing2
-              } else {
-                leg.rotation.x = name.endsWith('Left') ? legSwing2 : legSwing
-              }
+              const ud = leg.userData
+              const ph = (ud.name === 'frontLeft' || ud.name === 'backRight') ? 0 : Math.PI
+              const s = Math.sin(gaitPhase + ph)
+              leg.rotation.z = s * (ud.hind ? 0.5 : 0.4)
+              ud.lower.rotation.z = ud.base + (ud.hind ? -Math.max(0, s) * 0.8 : s * 0.3)
             })
 
-            // Body bob
-            deer.body.position.y = Math.sin(gaitPhase * 2) * 0.06
+            // Body bob + pitch
+            deer.body.position.y = Math.sin(gaitPhase * 2) * 0.05
+            deer.body.rotation.z = Math.sin(gaitPhase * 2 + 0.7) * 0.015
 
-            // Tail wag
-            deer.tail.rotation.x = Math.sin(elapsed * walkSpeed) * 0.3
+            // Head bob + slow glance
+            deer.head.rotation.x = 0.04 + Math.sin(gaitPhase) * 0.03
+            deer.head.rotation.y = Math.sin(elapsed * 0.5 + deer.seed) * 0.05
+
+            // Tail flick
+            deer.tail.rotation.z = 0.55 + Math.sin(gaitPhase * 2 + 1) * 0.15
+            deer.tail.rotation.y = Math.sin(elapsed * 2.6 + deer.seed) * 0.12
+
+            // Ear twitch
+            deer.earTwitch -= delta
+            if (deer.earTwitch <= 0) { deer.earTwitch = 3 + Math.random() * 6; deer.earTwitchAmp = 1 }
+            deer.earTwitchAmp *= Math.max(0, 1 - delta * 8)
+            const tw = Math.sin(elapsed * 42) * deer.earTwitchAmp * 0.25
+            deer.earL.rotation.y = Math.sin(elapsed * 1.1 + deer.seed) * 0.06 + tw
+            deer.earR.rotation.y = -Math.sin(elapsed * 1.1 + deer.seed + 0.7) * 0.06 + tw * 0.6
           }
         }
       }
