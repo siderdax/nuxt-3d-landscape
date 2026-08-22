@@ -1982,11 +1982,11 @@ export function useScene(containerRef) {
       { x: 0.82, cy: 2.48, ry: 0.46, rz: 0.40 },
       { x: 0.95, cy: 2.58, ry: 0.40, rz: 0.35 },
       { x: 1.02, cy: 2.68, ry: 0.33, rz: 0.30 }
-    ], 32), bodyMat))
+    ], 40), bodyMat))
     // white rump patch
-    const rump = new THREE.Mesh(new THREE.SphereGeometry(0.32, 20, 14), creamMat)
-    rump.scale.set(0.4, 0.78, 0.62)
-    rump.position.set(-0.95, 2.42, 0)
+    const rump = new THREE.Mesh(new THREE.SphereGeometry(0.32, 26, 18), creamMat)
+    rump.scale.set(0.28, 0.72, 0.58)
+    rump.position.set(-1.0, 2.44, 0)
     body.add(rump)
     // neck: separate loft rising off the chest
     body.add(new THREE.Mesh(makeLoft([
@@ -1996,7 +1996,7 @@ export function useScene(containerRef) {
       { x: 1.24, cy: 2.94, ry: 0.22, rz: 0.22 },
       { x: 1.34, cy: 3.06, ry: 0.20, rz: 0.20 },
       { x: 1.44, cy: 3.14, ry: 0.185, rz: 0.185 }
-    ], 24), bodyMat))
+    ], 30), bodyMat))
     deerGroup.add(body)
 
     // ---- head: group pivoted at the neck base so it can bob and look around ----
@@ -2010,16 +2010,16 @@ export function useScene(containerRef) {
       { x: 0.45, cy: -0.005, ry: 0.095, rz: 0.085 },
       { x: 0.56, cy: -0.015, ry: 0.075, rz: 0.07 },
       { x: 0.64, cy: -0.02, ry: 0.065, rz: 0.062 }
-    ], 28), bodyMat))
-    const throat = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 12), creamMat)
+    ], 36), bodyMat))
+    const throat = new THREE.Mesh(new THREE.SphereGeometry(0.09, 20, 14), creamMat)
     throat.scale.set(0.65, 0.42, 0.55)
     throat.position.set(0.4, -0.085, 0)
     head.add(throat)
-    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.05, 20, 14), noseMat)
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.05, 28, 20), noseMat)
     nose.scale.set(0.75, 0.8, 1.05)
     nose.position.set(0.645, -0.02, 0)
     head.add(nose)
-    const nostrilGeo = new THREE.SphereGeometry(0.013, 10, 8)
+    const nostrilGeo = new THREE.SphereGeometry(0.013, 12, 10)
     const nostrilL = new THREE.Mesh(nostrilGeo, darkMat)
     nostrilL.position.set(0.66, -0.006, 0.028)
     const nostrilR = nostrilL.clone()
@@ -2028,8 +2028,8 @@ export function useScene(containerRef) {
     const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.016, 0.085), darkMat)
     mouth.position.set(0.615, -0.075, 0)
     head.add(mouth)
-    const eyeGeo = new THREE.SphereGeometry(0.04, 24, 16)
-    const shineGeo = new THREE.SphereGeometry(0.013, 14, 10)
+    const eyeGeo = new THREE.SphereGeometry(0.04, 32, 22)
+    const shineGeo = new THREE.SphereGeometry(0.013, 18, 12)
     const eyeL = new THREE.Mesh(eyeGeo, eyeMat)
     eyeL.position.set(0.16, 0.055, 0.16)
     const eyeR = eyeL.clone()
@@ -2046,12 +2046,12 @@ export function useScene(containerRef) {
       { x: 0.14, cy: 0, ry: 0.055, rz: 0.02 },
       { x: 0.3, cy: 0, ry: 0.035, rz: 0.013 },
       { x: 0.42, cy: 0, ry: 0.008, rz: 0.006 }
-    ], 14)
+    ], 18)
     const earInnerGeo = makeLoft([
       { x: 0.03, cy: 0, ry: 0.032, rz: 0.011 },
       { x: 0.15, cy: 0, ry: 0.038, rz: 0.014 },
       { x: 0.3, cy: 0, ry: 0.02, rz: 0.008 }
-    ], 12)
+    ], 16)
     const makeEar = (zSide) => {
       const ear = new THREE.Group()
       ear.position.set(0.02, 0.17, 0.13 * zSide)
@@ -2074,7 +2074,7 @@ export function useScene(containerRef) {
       const antlerMat = new THREE.MeshStandardMaterial({ map: antlerTex, roughness: 0.7 })
       const addTube = (pts, r, s) => {
         const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], p[1], p[2] * s)))
-        head.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 12, r, 14), antlerMat))
+        head.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 16, r, 18), antlerMat))
       }
       for (const s of [1, -1]) {
         addTube([[0.06, 0.17, 0.14], [0.05, 0.36, 0.16], [-0.03, 0.56, 0.11]], 0.026, s)
@@ -2083,7 +2083,7 @@ export function useScene(containerRef) {
         addTube([[-0.09, 0.5, 0.08], [-0.03, 0.66, 0.03], [-0.12, 0.78, -0.01]], 0.01, s)
         addTube([[-0.28, 0.72, -0.01], [-0.38, 0.79, -0.05]], 0.008, s)
         addTube([[-0.27, 0.7, -0.02], [-0.33, 0.72, -0.08]], 0.007, s)
-        const joint = new THREE.Mesh(new THREE.SphereGeometry(0.028, 14, 10), antlerMat)
+        const joint = new THREE.Mesh(new THREE.SphereGeometry(0.028, 18, 12), antlerMat)
         joint.position.set(-0.03, 0.56, 0.11 * s)
         head.add(joint)
       }
@@ -2091,37 +2091,43 @@ export function useScene(containerRef) {
     body.add(head)
 
     // ---- legs: two joints each (hip pivot -> thigh, knee/hock -> cannon + hoof) ----
+    // sections above the hip pivot stay buried in the body through the full
+    // swing, so the leg never visibly detaches from the torso
     const thighGeoF = makeLoft([
+      { x: -0.4, cy: 0, ry: 0.2, rz: 0.18 },
+      { x: -0.2, cy: 0, ry: 0.17, rz: 0.155 },
       { x: 0, cy: 0, ry: 0.15, rz: 0.135 },
       { x: 0.45, cy: 0, ry: 0.125, rz: 0.115 },
       { x: 0.92, cy: 0, ry: 0.095, rz: 0.088 }
-    ], 24)
+    ], 32)
     thighGeoF.rotateZ(-Math.PI / 2)
     const thighGeoH = makeLoft([
+      { x: -0.4, cy: 0, ry: 0.26, rz: 0.24 },
+      { x: -0.2, cy: 0, ry: 0.23, rz: 0.21 },
       { x: 0, cy: 0, ry: 0.21, rz: 0.19 },
       { x: 0.4, cy: 0, ry: 0.17, rz: 0.155 },
       { x: 0.9, cy: 0, ry: 0.11, rz: 0.1 }
-    ], 26)
+    ], 34)
     thighGeoH.rotateZ(-Math.PI / 2)
     const cannonGeoF = makeLoft([
       { x: 0, cy: 0, ry: 0.085, rz: 0.08 },
       { x: 0.45, cy: 0, ry: 0.068, rz: 0.065 },
       { x: 0.88, cy: 0, ry: 0.055, rz: 0.058 }
-    ], 18)
+    ], 26)
     cannonGeoF.rotateZ(-Math.PI / 2)
     const cannonGeoH = makeLoft([
       { x: 0, cy: 0, ry: 0.08, rz: 0.075 },
       { x: 0.45, cy: 0, ry: 0.062, rz: 0.06 },
       { x: 0.95, cy: 0, ry: 0.05, rz: 0.052 }
-    ], 18)
+    ], 26)
     cannonGeoH.rotateZ(-Math.PI / 2)
-    const kneeGeo = new THREE.SphereGeometry(0.082, 18, 12)
-    const hockGeo = new THREE.SphereGeometry(0.088, 18, 12)
+    const kneeGeo = new THREE.SphereGeometry(0.082, 24, 16)
+    const hockGeo = new THREE.SphereGeometry(0.088, 24, 16)
     const hoofGeo = makeLoft([
       { x: 0, cy: 0, ry: 0.05, rz: 0.042 },
       { x: 0.05, cy: 0, ry: 0.055, rz: 0.05 },
       { x: 0.1, cy: 0, ry: 0.045, rz: 0.06 }
-    ], 16)
+    ], 24)
     hoofGeo.rotateZ(-Math.PI / 2)
 
     const legDefs = [
@@ -2154,15 +2160,18 @@ export function useScene(containerRef) {
       deerLegs.push(hip)
     })
 
-    // white tail: lofted, wags around its base
+    // white tail: curved loft pointing up and back off the rump; base
+    // orientation lives on the mesh, group rotation is the wag
     const tail = new THREE.Group()
-    tail.position.set(-1.05, 2.45, 0)
-    tail.add(new THREE.Mesh(makeLoft([
-      { x: 0, cy: 0, ry: 0.1, rz: 0.1 },
-      { x: 0.18, cy: 0, ry: 0.075, rz: 0.075 },
-      { x: 0.34, cy: 0, ry: 0.048, rz: 0.048 }
-    ], 16), creamMat))
-    tail.rotation.z = 0.55
+    tail.position.set(-0.98, 2.48, 0)
+    const tailMesh = new THREE.Mesh(makeLoft([
+      { x: 0, cy: 0, ry: 0.13, rz: 0.125 },
+      { x: 0.14, cy: 0.02, ry: 0.1, rz: 0.095 },
+      { x: 0.26, cy: 0.08, ry: 0.065, rz: 0.06 },
+      { x: 0.36, cy: 0.17, ry: 0.042, rz: 0.04 }
+    ], 24), creamMat)
+    tailMesh.quaternion.setFromUnitVectors(X_AXIS, new THREE.Vector3(-0.45, 0.89, 0).normalize())
+    tail.add(tailMesh)
     deerGroup.add(tail)
 
     deerGroup.scale.setScalar(scale)
@@ -2236,7 +2245,7 @@ export function useScene(containerRef) {
         })
         deer.body.position.y += (Math.sin(elapsed * 1.5 + deer.seed) * 0.012 - deer.body.position.y) * settle
         deer.body.rotation.z += (0 - deer.body.rotation.z) * settle
-        deer.tail.rotation.z += (0.55 - deer.tail.rotation.z) * settle
+        deer.tail.rotation.z += (0 - deer.tail.rotation.z) * settle
         deer.tail.rotation.y *= 1 - settle
         deer.head.rotation.x += (0.06 - deer.head.rotation.x) * settle
         deer.head.rotation.y = Math.sin(elapsed * 0.35 + deer.seed) * 0.28
@@ -2307,7 +2316,7 @@ export function useScene(containerRef) {
             deer.head.rotation.y = Math.sin(elapsed * 0.5 + deer.seed) * 0.05
 
             // Tail flick
-            deer.tail.rotation.z = 0.55 + Math.sin(gaitPhase * 2 + 1) * 0.15
+            deer.tail.rotation.z = Math.sin(gaitPhase * 2 + 1) * 0.2
             deer.tail.rotation.y = Math.sin(elapsed * 2.6 + deer.seed) * 0.12
 
             // Ear twitch

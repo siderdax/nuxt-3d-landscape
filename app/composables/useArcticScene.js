@@ -526,13 +526,16 @@ function makeBear(kit) {
   nose.scale.set(1.15, 0.85, 1.05)
   nose.position.set(1.52, 1.22, 0)
   g.add(earL, earR, eyeL, eyeR, nose)
-  // legs: one lofted column each, thick hip buried inside the body, foot flattened
-  const legGeo = makeLoft([
-    { x: 0, cy: 0, ry: 0.2, rz: 0.19 },
-    { x: 0.35, cy: 0, ry: 0.14, rz: 0.14 },
-    { x: 0.65, cy: 0, ry: 0.12, rz: 0.13 },
-    { x: 0.9, cy: 0, ry: 0.12, rz: 0.15 }
-  ], 8)
+    // legs: one lofted column each; sections above the pivot stay buried
+    // inside the body through the full swing so no gap opens at the hip
+    const legGeo = makeLoft([
+      { x: -0.35, cy: 0, ry: 0.24, rz: 0.23 },
+      { x: -0.15, cy: 0, ry: 0.22, rz: 0.21 },
+      { x: 0, cy: 0, ry: 0.2, rz: 0.19 },
+      { x: 0.35, cy: 0, ry: 0.14, rz: 0.14 },
+      { x: 0.65, cy: 0, ry: 0.12, rz: 0.13 },
+      { x: 0.9, cy: 0, ry: 0.12, rz: 0.15 }
+    ], 12)
   legGeo.rotateZ(-Math.PI / 2)
   const legs = []
   const pawGeo = new THREE.SphereGeometry(0.14, 8, 6)
@@ -547,8 +550,15 @@ function makeBear(kit) {
     g.add(pivot)
     legs.push(pivot)
   }
-  const tail = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), furMat)
-  tail.position.set(-0.92, 0.9, 0)
+  // small stub tail: lofted, base buried in the rump, pointing down-back
+  const tailGeo = makeLoft([
+    { x: 0, cy: 0, ry: 0.1, rz: 0.1 },
+    { x: 0.1, cy: 0, ry: 0.08, rz: 0.075 },
+    { x: 0.18, cy: 0, ry: 0.05, rz: 0.045 }
+  ], 10)
+  const tail = new THREE.Mesh(tailGeo, furMat)
+  tail.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, -0.45, 0).normalize())
+  tail.position.set(-0.72, 0.88, 0)
   g.add(tail)
   g.traverse((c) => { if (c.isMesh) c.castShadow = true })
   return { group: g, legs }
@@ -610,10 +620,12 @@ function makeFox(kit) {
   g.add(tail)
   // legs: thin lofted columns, hip buried in the body
   const legGeo = makeLoft([
+    { x: -0.14, cy: 0, ry: 0.085, rz: 0.08 },
+    { x: -0.06, cy: 0, ry: 0.075, rz: 0.068 },
     { x: 0, cy: 0, ry: 0.065, rz: 0.06 },
     { x: 0.2, cy: 0, ry: 0.048, rz: 0.05 },
     { x: 0.34, cy: 0, ry: 0.045, rz: 0.06 }
-  ], 8)
+  ], 10)
   legGeo.rotateZ(-Math.PI / 2)
   const legs = []
   for (const [sx, sz] of [[0.38, 0.13], [0.38, -0.13], [-0.35, 0.14], [-0.35, -0.14]]) {
@@ -691,16 +703,25 @@ function makeReindeer(withAntlers, kit) {
       g.add(branch)
     }
   }
-  const tail = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), furMat)
-  tail.position.set(-0.74, 1.12, 0)
+  // small tail: lofted stub, base buried in the rump, pointing back
+  const tailGeo = makeLoft([
+    { x: 0, cy: 0, ry: 0.08, rz: 0.08 },
+    { x: 0.09, cy: 0.01, ry: 0.06, rz: 0.055 },
+    { x: 0.16, cy: 0.03, ry: 0.035, rz: 0.03 }
+  ], 10)
+  const tail = new THREE.Mesh(tailGeo, furMat)
+  tail.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, 0.25, 0).normalize())
+  tail.position.set(-0.56, 1.16, 0)
   g.add(tail)
   // legs: long thin lofted columns with dark hooves, hip buried in the body
   const legGeo = makeLoft([
+    { x: -0.32, cy: 0, ry: 0.14, rz: 0.135 },
+    { x: -0.15, cy: 0, ry: 0.12, rz: 0.115 },
     { x: 0, cy: 0, ry: 0.1, rz: 0.1 },
     { x: 0.45, cy: 0, ry: 0.07, rz: 0.07 },
     { x: 0.75, cy: 0, ry: 0.055, rz: 0.06 },
     { x: 0.9, cy: 0, ry: 0.05, rz: 0.07 }
-  ], 8)
+  ], 12)
   legGeo.rotateZ(-Math.PI / 2)
   const hoofGeo = new THREE.CylinderGeometry(0.05, 0.058, 0.1, 6)
   const legs = []
@@ -1745,7 +1766,8 @@ export function useArcticScene(containerRef) {
     function walkLegs(legs, phase) {
       legs.forEach((leg, i) => {
         const p = i % 4 === 0 || i % 4 === 3 ? phase : phase + Math.PI
-        leg.rotation.x = Math.sin(p) * 0.4
+        // animals face +X: swing around Z so feet track forward/back
+        leg.rotation.z = Math.sin(p) * 0.4
       })
     }
 
@@ -1754,7 +1776,7 @@ export function useArcticScene(containerRef) {
       for (const bear of bears) {
         if (bear.state === 'idle') {
           bear.idle -= delta
-          bear.legs.forEach((leg) => { leg.rotation.x *= 0.9 })
+          bear.legs.forEach((leg) => { leg.rotation.z *= 0.9 })
           bear.group.position.y = bear.pos.y + Math.sin(elapsed * 1.1 + bear.phase) * 0.015
           if (bear.idle <= 0) {
             bear.state = 'walk'
@@ -1801,7 +1823,7 @@ export function useArcticScene(containerRef) {
       for (const r of reindeer) {
         if (r.state === 'idle') {
           r.idle -= delta
-          r.legs.forEach((leg) => { leg.rotation.x *= 0.9 })
+          r.legs.forEach((leg) => { leg.rotation.z *= 0.9 })
           if (r.idle <= 0) {
             r.state = 'walk'
             pickDryTarget(r, 60)
