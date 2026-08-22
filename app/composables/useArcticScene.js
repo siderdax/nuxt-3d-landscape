@@ -806,7 +806,7 @@ function buildPineGeos(rand) {
     { x: 2.8, cy: 0, ry: 0.07, rz: 0.07 },
     { x: 3.5, cy: 0.02, ry: 0.05, rz: 0.05 }
   ], 6)
-  trunk.rotateZ(-Math.PI / 2)
+  trunk.rotateZ(Math.PI / 2)
   wood.push(trunk)
 
   const loftTo = (sections, q, px, py, pz) => {
@@ -852,7 +852,7 @@ function buildPineGeos(rand) {
     { x: 0.5, cy: 0, ry: 0.05, rz: 0.05 },
     { x: 0.85, cy: 0, ry: 0.015, rz: 0.015 }
   ], 5)
-  tip.rotateZ(-Math.PI / 2)
+  tip.rotateZ(Math.PI / 2)
   tip.translate(0, 3.1, 0)
   needles.push(tip)
   const tipSnow = makeLoft([
@@ -860,7 +860,7 @@ function buildPineGeos(rand) {
     { x: 0.4, cy: 0.04, ry: 0.035, rz: 0.035 },
     { x: 0.7, cy: 0.03, ry: 0.012, rz: 0.012 }
   ], 5)
-  tipSnow.rotateZ(-Math.PI / 2)
+  tipSnow.rotateZ(Math.PI / 2)
   tipSnow.translate(0, 3.05, 0)
   snow.push(tipSnow)
 

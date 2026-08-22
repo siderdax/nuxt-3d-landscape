@@ -195,17 +195,78 @@ function makeNeedleTexture() {
   }, 1)
 }
 
-// leafy mottle for deciduous canopies
-function makeFoliageTexture() {
-  return makeTileTexture(256, (ctx, size) => {
-    ctx.fillStyle = '#4f8a2e'
-    ctx.fillRect(0, 0, size, size)
-    tileBlobs(ctx, size, 130, 5, 18, [
-      'rgba(96,160,60,0.5)', 'rgba(60,120,40,0.45)',
-      'rgba(140,190,80,0.4)', 'rgba(40,95,32,0.4)'
-    ])
-    tileSpeckle(ctx, size, 1400, ['rgba(30,70,25,0.25)', 'rgba(190,220,120,0.25)'], 1, 2)
-  }, 1)
+// A small leafy twig on a transparent background. One instanced card carrying
+// this texture reads as a handful of real leaves, so canopies are built from
+// thousands of such sprigs clustered on branch tips instead of blob spheres.
+function makeLeafSprigTexture() {
+  const size = 512
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+  ctx.clearRect(0, 0, size, size)
+
+  const rand = makeSeededRand(99)
+
+  // twig: gentle curve from bottom-left up to top-right
+  const steps = 22
+  const pts = []
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps
+    pts.push({
+      x: size * 0.2 + t * size * 0.6 + Math.sin(t * 2.6) * 12,
+      y: size * 0.93 - t * size * 0.76
+    })
+  }
+  ctx.lineCap = 'round'
+  ctx.strokeStyle = '#5a4028'
+  ctx.lineWidth = 11
+  ctx.beginPath()
+  ctx.moveTo(pts[0].x, pts[0].y)
+  for (const p of pts) ctx.lineTo(p.x, p.y)
+  ctx.stroke()
+
+  // leaves along the twig, alternating sides
+  const leafColors = ['#3f7d23', '#4a8c2a', '#57a036', '#63a83e', '#74b34c']
+  for (let i = 2; i <= steps; i += 2) {
+    const side = i % 4 === 2 ? 1 : -1
+    const t = i / steps
+    const p = pts[i]
+    const len = size * (0.13 + rand() * 0.07) * (1 - t * 0.2)
+    const ang = -Math.PI / 2 + side * (0.7 + rand() * 0.5) + (rand() - 0.5) * 0.3
+    const grad = ctx.createLinearGradient(p.x, p.y, p.x + Math.cos(ang) * len, p.y + Math.sin(ang) * len)
+    grad.addColorStop(0, leafColors[Math.floor(rand() * leafColors.length)])
+    grad.addColorStop(1, '#7ab648')
+    ctx.fillStyle = grad
+    ctx.save()
+    ctx.translate(p.x, p.y)
+    ctx.rotate(ang)
+    ctx.beginPath()
+    ctx.ellipse(len * 0.5, 0, len * 0.5, len * 0.3, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(24,52,16,0.5)'
+    ctx.lineWidth = 2.5
+    ctx.beginPath()
+    ctx.moveTo(2, 0)
+    ctx.lineTo(len * 0.9, 0)
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
+  return tex
+}
+
+// Dropped needle tuft for pine branch tips: a short lofted teardrop that
+// continues the branch's droop, so the lofted twigs read as full branches.
+function buildNeedleTuftGeo() {
+  return makeLoft([
+    { x: 0, cy: 0, ry: 0.06, rz: 0.045 },
+    { x: 0.3, cy: -0.02, ry: 0.042, rz: 0.032 },
+    { x: 0.55, cy: -0.045, ry: 0.012, rz: 0.01 }
+  ], 5)
 }
 
 // horizontal planks with grain + gaps
@@ -386,10 +447,12 @@ function makeLoft(sections, seg = 10) {
 }
 
 // Merged "real-branch pine" (summer, no snow): lofted tapered trunk + whorls of
-// lofted drooping branches. Returns two merged geometries (wood / needles).
+// lofted drooping branches. Returns merged geometries (wood / needles) plus the
+// branch layout, so needle tufts can be scattered along the same branches.
 function buildPineGeos(rand) {
   const wood = []
   const needles = []
+  const branches = []
   const X = new THREE.Vector3(1, 0, 0)
 
   const trunk = makeLoft([
@@ -399,7 +462,7 @@ function buildPineGeos(rand) {
     { x: 2.8, cy: 0, ry: 0.07, rz: 0.07 },
     { x: 3.5, cy: 0.02, ry: 0.05, rz: 0.05 }
   ], 6)
-  trunk.rotateZ(-Math.PI / 2)
+  trunk.rotateZ(Math.PI / 2)
   wood.push(trunk)
 
   const loftTo = (sections, q, px, py, pz) => {
@@ -421,6 +484,7 @@ function buildPineGeos(rand) {
       { x: len, cy: -0.04, ry: baseR * 0.12, rz: baseR * 0.12 }
     ]
     needles.push(loftTo(sec, q, px, y, pz))
+    branches.push({ ox: px, oy: y, oz: pz, dir: d, len })
   }
 
   const whorls = [
@@ -443,20 +507,23 @@ function buildPineGeos(rand) {
     { x: 0.5, cy: 0, ry: 0.05, rz: 0.05 },
     { x: 0.85, cy: 0, ry: 0.015, rz: 0.015 }
   ], 5)
-  tip.rotateZ(-Math.PI / 2)
+  tip.rotateZ(Math.PI / 2)
   tip.translate(0, 3.1, 0)
   needles.push(tip)
 
   return {
     wood: BufferGeometryUtils.mergeGeometries(wood, false),
-    needles: BufferGeometryUtils.mergeGeometries(needles, false)
+    needles: BufferGeometryUtils.mergeGeometries(needles, false),
+    branches
   }
 }
 
 // Deciduous: lofted slightly-curved trunk with lofted branches reaching into the
-// canopy. Returns one merged wood geometry (trunk + branches).
+// canopy. Returns the merged wood geometry (trunk + branches) plus the branch
+// layout, so leaf cards can be clustered on the same branch tips.
 function buildDeciduousWood(rand) {
   const parts = []
+  const branches = []
   const X = new THREE.Vector3(1, 0, 0)
 
   const trunk = makeLoft([
@@ -466,7 +533,7 @@ function buildDeciduousWood(rand) {
     { x: 2.8, cy: 0.18, ry: 0.1, rz: 0.1 },
     { x: 3.4, cy: 0.22, ry: 0.06, rz: 0.06 }
   ], 6)
-  trunk.rotateZ(-Math.PI / 2)
+  trunk.rotateZ(Math.PI / 2)
   parts.push(trunk)
 
   const branchSpecs = [
@@ -489,12 +556,18 @@ function buildDeciduousWood(rand) {
       ]
       const g = makeLoft(sec, 5)
       g.applyQuaternion(q)
-      g.translate(Math.cos(a) * 0.1, bs.y, Math.sin(a) * 0.1)
+      const bx = Math.cos(a) * 0.1
+      const bz = Math.sin(a) * 0.1
+      g.translate(bx, bs.y, bz)
       parts.push(g)
+      branches.push({ ox: bx, oy: bs.y, oz: bz, dir: d, len: bs.len })
     }
   })
 
-  return BufferGeometryUtils.mergeGeometries(parts, false)
+  return {
+    geo: BufferGeometryUtils.mergeGeometries(parts, false),
+    branches
+  }
 }
 
 function makeSeededRand(seed) {
@@ -507,9 +580,6 @@ export function useScene(containerRef) {
   let scene, camera, renderer, controls, animationId, stopCameraMove
   const texAssets = []
   let cloudGroups = []
-  const pineOrig = []
-  let treePhases = []
-  let deciduous = null
   let lakeMaterial
   let grassWindShader = null
   let terrainHeights = {}
@@ -543,6 +613,55 @@ export function useScene(containerRef) {
     return {
       x: (Math.sin(x * 0.05 + t * 0.8) + Math.cos(z * 0.04 - t * 0.6) * 0.5) * 0.5,
       z: (Math.cos(x * 0.04 - t * 0.5) + Math.sin(z * 0.05 + t * 0.7) * 0.5) * 0.5,
+    }
+  }
+
+  // Shared wind state, updated once per frame and read by every wind shader
+  const windState = {
+    uTime: { value: 0 },
+    uWind: { value: new THREE.Vector2() }
+  }
+
+  // GPU wind sway: displaces vertices in the shader instead of recomposing
+  // instance matrices on the CPU. Weight is per-vertex — local height for
+  // lofted trunks/branches, or an `aSway` instance attribute for leaf cards
+  // and needle tufts. Phase comes from the instance's world position, so
+  // neighbouring trees move together in a travelling wave.
+  function applyWindSway(material, amp, weightExpr, flutter = 0) {
+    // onBeforeCompile is NOT part of the program cache key — without a
+    // unique custom key, a material with identical standard parameters
+    // (e.g. the tuft clone of needleMat) would reuse another's program.
+    material.customProgramCacheKey = () => `wind-sway:${amp}:${weightExpr}:${flutter}`
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = windState.uTime
+      shader.uniforms.uWind = windState.uWind
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+           uniform float uTime;
+           uniform vec2 uWind;${weightExpr === 'aSway' ? '\nattribute float aSway;' : ''}`
+        )
+        .replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+           {
+             #ifdef USE_INSTANCING
+               vec4 swayRoot = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+             #else
+               vec4 swayRoot = vec4(0.0, 0.0, 0.0, 1.0);
+             #endif
+             float swayPhase = swayRoot.x * 0.31 + swayRoot.z * 0.23;
+             float swayW = ${weightExpr};
+             swayW = clamp(swayW, 0.0, 1.0);
+             swayW *= swayW;
+             float swayA = sin(uTime * 1.35 + swayPhase) + 0.5 * sin(uTime * 2.9 + swayPhase * 1.7 + 1.2);
+             float swayB = cos(uTime * 1.05 + swayPhase * 1.31);
+             transformed.x += (swayA * ${amp} + uWind.x * ${amp * 0.6}) * swayW;
+             transformed.z += (swayB * ${amp} + uWind.y * ${amp * 0.6}) * swayW;
+             ${flutter ? `transformed.x += sin(uTime * 5.5 + swayPhase * 3.1) * ${flutter} * swayW;` : ''}
+           }`
+        )
     }
   }
 
@@ -835,6 +954,7 @@ export function useScene(containerRef) {
     const count = 350
     const perVariant = Math.ceil(count / 3)
     const dummy = new THREE.Object3D()
+    const X_AXIS = new THREE.Vector3(1, 0, 0)
 
     const barkTex = makeBarkTexture()
     const needleTex = makeNeedleTexture()
@@ -846,15 +966,42 @@ export function useScene(containerRef) {
       roughness: 0.8,
       flatShading: true,
     })
+    // tufts get their own material: sway weight comes from aSway, not height
+    const tuftMat = needleMat.clone()
+    applyWindSway(woodMat, 0.03, 'transformed.y / 3.6')
+    applyWindSway(needleMat, 0.06, 'transformed.y / 4.0')
+    applyWindSway(tuftMat, 0.1, 'aSway', 0.04)
+
+    const tuftGeoBase = buildNeedleTuftGeo()
+    const tuftSpots = [
+      { t: 0.55, s: 0.8 },
+      { t: 1.0, s: 1.0 }
+    ]
 
     const meshes = [0, 1, 2].map(v => {
       const vg = buildPineGeos(makeSeededRand(4000 + v * 991))
+      const tGeo = tuftGeoBase.clone()
+      const tuftCapacity = perVariant * vg.branches.length * tuftSpots.length
+      const sways = new Float32Array(tuftCapacity)
+      tGeo.setAttribute('aSway', new THREE.InstancedBufferAttribute(sways, 1))
       return {
         vUsed: 0,
+        branches: vg.branches,
+        sways,
         wood: new THREE.InstancedMesh(vg.wood, woodMat, perVariant),
-        needles: new THREE.InstancedMesh(vg.needles, needleMat, perVariant)
+        needles: new THREE.InstancedMesh(vg.needles, needleMat, perVariant),
+        tufts: new THREE.InstancedMesh(tGeo, tuftMat, tuftCapacity)
       }
     })
+
+    const treeM = new THREE.Matrix4()
+    const tuftT = new THREE.Matrix4()
+    const tuftR = new THREE.Matrix4()
+    const tuftS = new THREE.Matrix4()
+    const tuftM = new THREE.Matrix4()
+    const branchQ = new THREE.Quaternion()
+    const branchQ2 = new THREE.Quaternion()
+    const rollQ = new THREE.Quaternion()
 
     let placed = 0
     let attempts = 0
@@ -878,83 +1025,111 @@ export function useScene(containerRef) {
       dummy.updateMatrix()
       m.wood.setMatrixAt(k, dummy.matrix)
       m.needles.setMatrixAt(k, dummy.matrix)
+      treeM.copy(dummy.matrix)
 
       const greenVar = 0.7 + Math.random() * 0.6
       m.wood.setColorAt(k, new THREE.Color(0xffffff).multiplyScalar(0.75 + Math.random() * 0.4))
       m.needles.setColorAt(k, new THREE.Color(0xbfd8a8).multiplyScalar(greenVar))
 
-      treeSpots.push({ x, z, h })
-      const phase = Math.random() * Math.PI * 2
-      treePhases.push(phase)
-      pineOrig.push({ mesh: m.needles, k, phase, m4: dummy.matrix.clone() })
+      // needle tufts along each branch (mid + tip). Composed in the tree's
+      // local space then transformed by the tree matrix, so they inherit the
+      // tree's position, yaw and scale exactly like the lofted branches do.
+      const base = k * m.branches.length * tuftSpots.length
+      for (let b = 0; b < m.branches.length; b++) {
+        const br = m.branches[b]
+        branchQ.setFromUnitVectors(X_AXIS, br.dir)
+        for (let ti = 0; ti < tuftSpots.length; ti++) {
+          const sp = tuftSpots[ti]
+          const idx = base + b * tuftSpots.length + ti
+          const jx = 0.9 + Math.random() * 0.2
+          const px = br.ox + br.dir.x * br.len * sp.t * jx
+          const py = br.oy + br.dir.y * br.len * sp.t * jx
+          const pz = br.oz + br.dir.z * br.len * sp.t * jx
+          tuftT.makeTranslation(px, py, pz)
+          branchQ2.copy(branchQ)
+          rollQ.setFromAxisAngle(X_AXIS, (Math.random() - 0.5) * 0.6)
+          branchQ2.multiply(rollQ)
+          tuftR.makeRotationFromQuaternion(branchQ2)
+          const ts = sp.s * (0.8 + Math.random() * 0.5)
+          tuftS.makeScale(ts, ts, ts)
+          tuftM.copy(treeM).multiply(tuftT).multiply(tuftR).multiply(tuftS)
+          m.tufts.setMatrixAt(idx, tuftM)
+          m.sways[idx] = Math.min(1, Math.max(0.15, py / 4.5))
+          m.tufts.setColorAt(idx, new THREE.Color(0xbfd8a8).multiplyScalar(greenVar * (0.85 + Math.random() * 0.3)))
+        }
+      }
 
+      treeSpots.push({ x, z, h })
       placed++
     }
 
     for (const m of meshes) {
-      for (const im of [m.wood, m.needles]) {
-        im.count = m.vUsed
+      for (const im of [m.wood, m.needles, m.tufts]) {
+        im.count = im === m.tufts ? m.vUsed * m.branches.length * tuftSpots.length : m.vUsed
         im.instanceMatrix.needsUpdate = true
         im.castShadow = true
         im.receiveShadow = true
         if (im.instanceColor) im.instanceColor.needsUpdate = true
-        scene.add(im)
       }
+      m.tufts.geometry.attributes.aSway.needsUpdate = true
+      scene.add(m.wood, m.needles, m.tufts)
     }
   }
 
   function createDeciduousTrees() {
     const count = 120
-
-    const makeBlobGeo = (radius, detail, seed) => {
-      const geo = new THREE.SphereGeometry(radius, detail, detail - 1)
-      const pos = geo.attributes.position
-      for (let j = 0; j < pos.count; j++) {
-        const px = pos.getX(j)
-        const py = pos.getY(j)
-        const pz = pos.getZ(j)
-        const n = noise.noise2D(px * 1.8 + seed, pz * 1.8 + seed * 2) * radius * 0.35
-        pos.setX(j, px + n * 0.8)
-        pos.setY(j, py * 0.82)
-        pos.setZ(j, pz - n * 0.5)
-      }
-      geo.computeVertexNormals()
-      return geo
-    }
+    const Z_AXIS = new THREE.Vector3(0, 0, 1)
 
     const barkTex = makeBarkTexture()
-    const foliageTex = makeFoliageTexture()
-    texAssets.push(barkTex, foliageTex)
+    const sprigTex = makeLeafSprigTexture()
+    texAssets.push(barkTex, sprigTex)
     const trunkMat = new THREE.MeshStandardMaterial({ map: barkTex, color: 0xcbb49b, roughness: 0.9 })
-    const trunkGeo = buildDeciduousWood(makeSeededRand(71))
+    applyWindSway(trunkMat, 0.05, 'transformed.y / 4.4')
 
-    // canopy blobs keep the lumpy look, now textured + flatter
-    const blobLayers = [
-      { geo: makeBlobGeo(2.4, 9, 3), color: 0x4a8c2a, yOff: 4.1, scale: 1.0 },
-      { geo: makeBlobGeo(1.7, 8, 11), color: 0x57a036, yOff: 5.5, scale: 0.9 },
-      { geo: makeBlobGeo(1.2, 7, 23), color: 0x6ab04a, yOff: 6.4, scale: 0.8 },
-    ]
-
-    const trunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, count)
+    const wood = buildDeciduousWood(makeSeededRand(71))
+    const trunkMesh = new THREE.InstancedMesh(wood.geo, trunkMat, count)
     trunkMesh.castShadow = true
     trunkMesh.receiveShadow = true
 
-    const blobMeshes = blobLayers.map(layer => {
-      const mat = new THREE.MeshStandardMaterial({
-        map: foliageTex,
-        color: layer.color,
-        roughness: 0.85,
-        flatShading: true,
-      })
-      const mesh = new THREE.InstancedMesh(layer.geo, mat, count)
-      mesh.castShadow = true
-      return mesh
+    // canopy: instanced leaf-sprig cards clustered on the lofted branch tips —
+    // a real-leaf silhouette instead of blob spheres
+    const cardsPerBranch = 11
+    const trunkCards = 8
+    const cardsPerTree = wood.branches.length * cardsPerBranch + trunkCards
+    const cardGeo = new THREE.PlaneGeometry(1, 1)
+    cardGeo.setAttribute('aSway', new THREE.InstancedBufferAttribute(new Float32Array(count * cardsPerTree), 1))
+    const cardMat = new THREE.MeshStandardMaterial({
+      map: sprigTex,
+      alphaTest: 0.5,
+      side: THREE.DoubleSide,
+      roughness: 0.85,
     })
+    applyWindSway(cardMat, 0.16, 'aSway', 0.05)
+    const cardDepth = new THREE.MeshDepthMaterial({
+      depthPacking: THREE.RGBADepthPacking,
+      map: sprigTex,
+      alphaTest: 0.5,
+    })
+    const cardMesh = new THREE.InstancedMesh(cardGeo, cardMat, count * cardsPerTree)
+    cardMesh.customDepthMaterial = cardDepth
+    cardMesh.castShadow = true
+
+    const greenColors = [0x3f7d23, 0x4a8c2a, 0x57a036, 0x6ab04a, 0x74b34c]
+    const warmColors = [0x9db53c, 0xd4ac3e, 0xc87d2f]
 
     const dummy = new THREE.Object3D()
-    const phases = []
+    const treeM = new THREE.Matrix4()
+    const cardM = new THREE.Matrix4()
+    const finalM = new THREE.Matrix4()
+    const pos = new THREE.Vector3()
+    const quat = new THREE.Quaternion()
+    const scl = new THREE.Vector3()
+    const norm = new THREE.Vector3()
+    const cardColor = new THREE.Color()
+    const upDir = new THREE.Vector3(0, 1, 0)
     let placed = 0
     let attempts = 0
+    let cardIdx = 0
 
     while (placed < count && attempts < count * 10) {
       attempts++
@@ -966,30 +1141,54 @@ export function useScene(containerRef) {
       const scale = 0.7 + Math.random() * 0.9
       const rotation = Math.random() * Math.PI * 2
 
-      dummy.rotation.set(0, rotation, 0)
-      dummy.scale.set(scale, scale, scale)
-
       dummy.position.set(x, h + 0.02, z)
+      dummy.rotation.set(0, rotation, 0)
+      dummy.scale.setScalar(scale)
       dummy.updateMatrix()
       trunkMesh.setMatrixAt(placed, dummy.matrix)
+      treeM.copy(dummy.matrix)
+      trunkMesh.setColorAt(placed, new THREE.Color(0xcbb49b).multiplyScalar(0.8 + Math.random() * 0.4))
 
-      const trunkColor = new THREE.Color(0xcbb49b).multiplyScalar(0.8 + Math.random() * 0.4)
-      trunkMesh.setColorAt(placed, trunkColor)
-
-      for (let b = 0; b < blobMeshes.length; b++) {
-        const layer = blobLayers[b]
-        const bs = scale * layer.scale * (0.9 + Math.random() * 0.2)
-        dummy.position.set(x, h + scale * layer.yOff, z)
-        dummy.scale.set(bs, bs * 0.92, bs)
-        dummy.rotation.y = rotation + b * 0.7
-        dummy.updateMatrix()
-        blobMeshes[b].setMatrixAt(placed, dummy.matrix)
-
-        const gVar = 0.75 + Math.random() * 0.45
-        blobMeshes[b].setColorAt(placed, new THREE.Color(layer.color).multiplyScalar(gVar))
+      const setCard = (px, py, pz, dir) => {
+        pos.set(px, py, pz)
+        // card normal: random direction made perpendicular to the branch,
+        // then a random roll around it — leaves face every which way
+        norm.set(Math.random() - 0.5, Math.random() * 0.6 - 0.2, Math.random() - 0.5)
+        norm.addScaledVector(dir, -norm.dot(dir))
+        if (norm.lengthSq() < 0.0001) norm.set(0, 1, 0)
+        norm.normalize()
+        quat.setFromUnitVectors(Z_AXIS, norm)
+        // roll around the card's own normal (local Z) so the facing is kept
+        quat.multiply(new THREE.Quaternion().setFromAxisAngle(Z_AXIS, Math.random() * Math.PI * 2))
+        const cs = 0.85 + Math.random() * 0.75
+        scl.set(cs, cs, cs)
+        cardM.compose(pos, quat, scl)
+        finalM.copy(treeM).multiply(cardM)
+        cardMesh.setMatrixAt(cardIdx, finalM)
+        cardGeo.attributes.aSway.array[cardIdx] = Math.min(1, Math.max(0.25, py / 5.5))
+        const pool = Math.random() < 0.82 ? greenColors : warmColors
+        cardColor.setHex(pool[Math.floor(Math.random() * pool.length)]).multiplyScalar(0.75 + Math.random() * 0.45)
+        cardMesh.setColorAt(cardIdx, cardColor)
+        cardIdx++
       }
 
-      phases.push(Math.random() * Math.PI * 2)
+      for (const br of wood.branches) {
+        for (let c = 0; c < cardsPerBranch; c++) {
+          const t = 0.45 + 0.65 * Math.pow(Math.random(), 0.6)
+          setCard(
+            br.ox + br.dir.x * br.len * t + (Math.random() - 0.5) * 0.4,
+            br.oy + br.dir.y * br.len * t + (Math.random() - 0.5) * 0.35,
+            br.oz + br.dir.z * br.len * t + (Math.random() - 0.5) * 0.4,
+            br.dir
+          )
+        }
+      }
+      for (let c = 0; c < trunkCards; c++) {
+        const a = Math.random() * Math.PI * 2
+        const r = 0.5 + Math.random() * 0.9
+        setCard(Math.cos(a) * r - 0.15, 3.5 + Math.random() * 0.9, Math.sin(a) * r, upDir)
+      }
+
       deciduousSpots.push({ x, z, h })
       placed++
     }
@@ -998,23 +1197,12 @@ export function useScene(containerRef) {
     trunkMesh.instanceMatrix.needsUpdate = true
     if (trunkMesh.instanceColor) trunkMesh.instanceColor.needsUpdate = true
 
-    const blobOrig = blobMeshes.map(mesh => {
-      mesh.count = placed
-      mesh.instanceMatrix.needsUpdate = true
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-      const origMatrices = []
-      const tmp = new THREE.Matrix4()
-      for (let i = 0; i < placed; i++) {
-        mesh.getMatrixAt(i, tmp)
-        origMatrices.push(tmp.clone())
-      }
-      return origMatrices
-    })
+    cardMesh.count = placed * cardsPerTree
+    cardMesh.instanceMatrix.needsUpdate = true
+    if (cardMesh.instanceColor) cardMesh.instanceColor.needsUpdate = true
+    cardGeo.attributes.aSway.needsUpdate = true
 
-    scene.add(trunkMesh)
-    blobMeshes.forEach(m => scene.add(m))
-
-    deciduous = { trunk: trunkMesh, blobs: blobMeshes, blobOrig, phases }
+    scene.add(trunkMesh, cardMesh)
   }
 
   function createClouds() {
@@ -2559,76 +2747,12 @@ export function useScene(containerRef) {
     // Shared breeze for everything animated by wind
     const wind = windAt(0, 0, elapsed)
 
-    // Grass wind (GPU)
+    // Grass + tree wind (GPU): one shared state feeds every wind shader
+    windState.uTime.value = elapsed
+    windState.uWind.value.set(wind.x, wind.z)
     if (grassWindShader) {
       grassWindShader.uniforms.uTime.value = elapsed
       grassWindShader.uniforms.uWind.value.set(wind.x, wind.z)
-    }
-
-    // Gentle tree sway - tilt branchy canopies around their base orientation
-    if (pineOrig.length) {
-      const dummy = new THREE.Object3D()
-      const pos = new THREE.Vector3()
-      const quat = new THREE.Quaternion()
-      const scl = new THREE.Vector3()
-      const windQuat = new THREE.Quaternion()
-      const euler = new THREE.Euler()
-      const dirty = new Set()
-
-      for (let i = 0; i < pineOrig.length; i++) {
-        const e = pineOrig[i]
-        e.m4.decompose(pos, quat, scl)
-        euler.set(
-          Math.sin(elapsed * 1.2 + e.phase) * 0.035 + wind.x * 0.04,
-          0,
-          Math.cos(elapsed * 1.0 + e.phase) * 0.035 + wind.z * 0.04
-        )
-        windQuat.setFromEuler(euler)
-        dummy.position.copy(pos)
-        dummy.quaternion.copy(quat).premultiply(windQuat)
-        dummy.scale.copy(scl)
-        dummy.updateMatrix()
-        e.mesh.setMatrixAt(e.k, dummy.matrix)
-        dirty.add(e.mesh)
-      }
-      for (const im of dirty) im.instanceMatrix.needsUpdate = true
-    }
-
-    // Deciduous foliage sway
-    if (deciduous) {
-      const count = deciduous.phases.length
-      const dummy = new THREE.Object3D()
-      const pos = new THREE.Vector3()
-      const quat = new THREE.Quaternion()
-      const scale = new THREE.Vector3()
-      const windQuat = new THREE.Quaternion()
-      const euler = new THREE.Euler()
-
-      for (let i = 0; i < count; i++) {
-        const phase = deciduous.phases[i]
-        const amp = 0.045 + wind.x * 0.05
-        const ampZ = 0.045 + wind.z * 0.05
-
-        for (let b = 0; b < deciduous.blobs.length; b++) {
-          const mesh = deciduous.blobs[b]
-          const orig = deciduous.blobOrig[b][i]
-          const bScale = 1 + b * 0.25
-          orig.decompose(pos, quat, scale)
-          euler.set(
-            Math.sin(elapsed * 1.1 + phase + b * 0.9) * amp * bScale,
-            0,
-            Math.cos(elapsed * 0.9 + phase + b * 0.7) * ampZ * bScale
-          )
-          windQuat.setFromEuler(euler)
-          dummy.position.copy(pos)
-          dummy.quaternion.copy(quat).premultiply(windQuat)
-          dummy.scale.copy(scale)
-          dummy.updateMatrix()
-          mesh.setMatrixAt(i, dummy.matrix)
-        }
-      }
-
-      deciduous.blobs.forEach(mesh => { mesh.instanceMatrix.needsUpdate = true })
     }
 
     // Update deer herd
