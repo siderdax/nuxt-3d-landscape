@@ -797,6 +797,266 @@ function makeRaider(type, kit) {
   return { group: g, engineMat, flameMat, flames, beaconMat }
 }
 
+// ---------- mobile suit (MS-01, outpost hover guard) ----------
+
+function finBladeShape() {
+  const s = new THREE.Shape()
+  s.moveTo(0, 0)
+  s.lineTo(0.5, 0.075)
+  s.lineTo(0.62, 0)
+  s.lineTo(0.5, -0.075)
+  s.closePath()
+  return s
+}
+
+// centered rounded armor plate, front facing +Z
+function plateGeo(w, h, r, depth) {
+  const g = new THREE.ExtrudeGeometry(roundedRectShape(w, h, r), {
+    depth, bevelEnabled: true, bevelThickness: 0.035, bevelSize: 0.035, bevelSegments: 4, curveSegments: 6
+  })
+  g.translate(0, 0, -depth / 2)
+  return g
+}
+
+function makeMobileSuit(track) {
+  const whiteTex = makePanelTexture({ base: '#eef1f5', label: 'MS-01', labelSub: 'TERAN ARMADA' })
+  const blueTex = makePanelTexture({ base: '#3d5f92', hazard: true })
+  const redTex = makePanelTexture({ base: '#a03636' })
+  const yellowTex = makePanelTexture({ base: '#c9992e' })
+  track.push(whiteTex, blueTex, redTex, yellowTex)
+
+  const white = new THREE.MeshStandardMaterial({ map: whiteTex, bumpMap: whiteTex, bumpScale: 0.015, roughness: 0.4, metalness: 0.5 })
+  const blue = new THREE.MeshStandardMaterial({ map: blueTex, bumpMap: blueTex, bumpScale: 0.015, roughness: 0.4, metalness: 0.5 })
+  const red = new THREE.MeshStandardMaterial({ map: redTex, bumpMap: redTex, bumpScale: 0.015, roughness: 0.45, metalness: 0.45 })
+  const yellow = new THREE.MeshStandardMaterial({ map: yellowTex, bumpMap: yellowTex, bumpScale: 0.012, roughness: 0.42, metalness: 0.5 })
+  const joint = new THREE.MeshStandardMaterial({ color: 0x46505e, roughness: 0.55, metalness: 0.6 })
+  const face = new THREE.MeshStandardMaterial({ color: 0xe8c86a, roughness: 0.35, metalness: 0.65 })
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x0a2a30, emissive: 0x9fe8ff, emissiveIntensity: 2.2 })
+  const ventMat = new THREE.MeshStandardMaterial({ color: 0x3a0f0f, emissive: 0xff5544, emissiveIntensity: 1.2 })
+  const glowCyan = new THREE.MeshStandardMaterial({ color: 0x0a2a30, emissive: 0x55e0ff, emissiveIntensity: 1.6 })
+  const beamGlow = new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })
+  const flameMat = new THREE.MeshBasicMaterial({ color: 0x9fdcff, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false })
+
+  const g = new THREE.Group()
+  const flames = []
+  function add(parent, geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) {
+    const m = new THREE.Mesh(geo, mat)
+    m.position.set(x, y, z)
+    if (rx) m.rotation.x = rx
+    if (ry) m.rotation.y = ry
+    if (rz) m.rotation.z = rz
+    parent.add(m)
+    return m
+  }
+
+  // ---- legs (running stride: front leg reaching, back leg folded) ----
+  function buildLeg(sx, stride, kneeBend) {
+    const leg = new THREE.Group()
+    leg.position.set(sx * 0.38, 2.9, 0)
+    leg.rotation.x = stride
+    const hipGeo = new THREE.CylinderGeometry(0.17, 0.17, 0.15, 18)
+    hipGeo.rotateZ(Math.PI / 2)
+    add(leg, hipGeo, joint, 0, 0, 0)
+    add(leg, plateGeo(0.46, 1.0, 0.14, 0.12), blue, 0, -0.5, 0.14)
+    add(leg, plateGeo(0.34, 0.85, 0.1, 0.1), blue, sx * 0.2, -0.5, 0, 0, Math.PI / 2, 0)
+    add(leg, plateGeo(0.38, 0.7, 0.1, 0.09), blue, 0, -0.5, -0.14)
+    add(leg, new THREE.BoxGeometry(0.06, 0.62, 0.05), yellow, sx * 0.17, -0.5, 0.21)
+    add(leg, new THREE.SphereGeometry(0.16, 24, 18), joint, 0, -1.05, 0.03)
+    // lower leg folds at the knee (heel toward the back)
+    const shin = new THREE.Group()
+    shin.position.set(0, -1.05, 0.03)
+    shin.rotation.x = kneeBend
+    add(shin, plateGeo(0.24, 0.34, 0.06, 0.08), white, 0, 0.05, 0.13)
+    add(shin, plateGeo(0.38, 0.95, 0.1, 0.12), blue, 0, -0.57, 0.09)
+    add(shin, plateGeo(0.22, 0.55, 0.06, 0.07), white, 0, -0.5, -0.17)
+    add(shin, new THREE.BoxGeometry(0.04, 0.5, 0.04), red, 0, -0.5, -0.22)
+    add(shin, new THREE.CylinderGeometry(0.09, 0.11, 0.16, 14), joint, 0, -1.13, 0)
+    add(shin, plateGeo(0.42, 0.3, 0.09, 0.64), red, 0, -1.57, 0.02)
+    add(shin, plateGeo(0.34, 0.18, 0.06, 0.3), red, 0, -1.65, 0.29)
+    add(shin, plateGeo(0.4, 0.2, 0.06, 0.12), white, 0, -1.37, 0.08)
+    add(shin, new THREE.BoxGeometry(0.3, 0.05, 0.5), yellow, 0, -1.45, 0.02)
+    leg.add(shin)
+    g.add(leg)
+    return leg
+  }
+  buildLeg(1, -0.55, 0.5)   // front leg: reaching forward
+  buildLeg(-1, 0.45, 0.95)  // back leg: trailing, heel up
+
+  // ---- torso: leans forward for the running posture (pivot at the waist) ----
+  const TORSO_TILT = 0.26
+  const torso = new THREE.Group()
+  torso.position.set(0, 3.3, 0)
+  torso.rotation.x = TORSO_TILT
+  g.add(torso)
+
+  // waist / pelvis
+  add(torso, plateGeo(0.72, 0.42, 0.1, 0.18), white, 0, -0.12, 0)
+  add(torso, plateGeo(0.5, 0.2, 0.06, 0.1), blue, 0, -0.3, 0.16, 0.45)
+  for (const sx of [-1, 1]) {
+    add(torso, plateGeo(0.18, 0.26, 0.05, 0.06), red, sx * 0.2, -0.34, 0.14, 0.6)
+    add(torso, new THREE.BoxGeometry(0.08, 0.14, 0.06), yellow, sx * 0.34, -0.2, 0.1)
+  }
+
+  // chest
+  add(torso, plateGeo(0.44, 0.8, 0.12, 0.16), white, -0.25, 0.75, 0.16, 0, -0.06, 0)
+  add(torso, plateGeo(0.44, 0.8, 0.12, 0.16), white, 0.25, 0.75, 0.16, 0, 0.06, 0)
+  add(torso, plateGeo(0.14, 0.6, 0.04, 0.06), yellow, 0, 0.75, 0.27)
+  // signature round chest vents
+  for (const sx of [-1, 1]) {
+    add(torso, new THREE.TorusGeometry(0.15, 0.05, 12, 28), white, sx * 0.25, 0.98, 0.28)
+    const ventDisc = new THREE.CylinderGeometry(0.115, 0.115, 0.03, 20)
+    ventDisc.rotateX(Math.PI / 2)
+    add(torso, ventDisc, ventMat, sx * 0.25, 0.98, 0.27)
+  }
+  // side intakes
+  for (const sx of [-1, 1]) {
+    const intakeGeo = new THREE.CylinderGeometry(0.13, 0.13, 0.08, 18)
+    intakeGeo.rotateZ(Math.PI / 2)
+    add(torso, intakeGeo, joint, sx * 0.5, 0.6, 0.1)
+    const intakeCore = new THREE.CylinderGeometry(0.08, 0.08, 0.1, 16)
+    intakeCore.rotateZ(Math.PI / 2)
+    add(torso, intakeCore, glowCyan, sx * 0.52, 0.6, 0.1)
+  }
+  add(torso, plateGeo(0.34, 0.4, 0.08, 0.12), white, 0, 0.32, 0.12)
+  add(torso, new THREE.BoxGeometry(0.26, 0.03, 0.04), joint, 0, 0.38, 0.19)
+  add(torso, new THREE.BoxGeometry(0.26, 0.03, 0.04), joint, 0, 0.3, 0.19)
+  add(torso, new THREE.BoxGeometry(0.26, 0.03, 0.04), joint, 0, 0.22, 0.19)
+  // backplate + backpack with quad thrusters
+  add(torso, plateGeo(0.74, 0.9, 0.12, 0.12), white, 0, 0.75, -0.17)
+  add(torso, plateGeo(0.5, 0.6, 0.06, 0.08), blue, 0, 0.75, -0.26)
+  add(torso, new THREE.BoxGeometry(0.5, 0.55, 0.24), joint, 0, 0.8, -0.42)
+  for (const [nx, ny] of [[-0.15, 0.12], [0.15, 0.12], [-0.15, -0.12], [0.15, -0.12]]) {
+    const nozGeo = new THREE.CylinderGeometry(0.08, 0.11, 0.3, 14)
+    nozGeo.rotateX(Math.PI / 2)
+    add(torso, nozGeo, joint, nx, 0.8 + ny, -0.62)
+    const glowGeo = new THREE.CylinderGeometry(0.065, 0.065, 0.05, 14)
+    glowGeo.rotateX(Math.PI / 2)
+    add(torso, glowGeo, glowCyan, nx, 0.8 + ny, -0.79)
+    const flameGeo = new THREE.ConeGeometry(0.065, 0.55, 12)
+    flameGeo.rotateX(-Math.PI / 2)
+    flameGeo.translate(0, 0, -0.27)
+    flames.push(add(torso, flameGeo, flameMat, nx, 0.8 + ny, -0.81))
+  }
+  // shoulder-side thrusters
+  for (const sx of [-1, 1]) {
+    const stGeo = new THREE.CylinderGeometry(0.07, 0.09, 0.26, 12)
+    stGeo.rotateX(Math.PI / 2)
+    add(torso, stGeo, joint, sx * 0.66, 0.6, -0.3)
+    const sgGeo = new THREE.CylinderGeometry(0.055, 0.055, 0.04, 12)
+    sgGeo.rotateX(Math.PI / 2)
+    add(torso, sgGeo, glowCyan, sx * 0.66, 0.6, -0.44)
+    const sfGeo = new THREE.ConeGeometry(0.055, 0.4, 10)
+    sfGeo.rotateX(-Math.PI / 2)
+    sfGeo.translate(0, 0, -0.2)
+    flames.push(add(torso, sfGeo, flameMat, sx * 0.66, 0.6, -0.46))
+  }
+
+  // ---- arms: shoulder -> forearm (elbow bent for a natural ready pose) ----
+  const SHOULDER_TILT = -0.42, FOREARM_TILT = -0.75  // right arm aim-ready
+  function buildRifle(parent) {
+    const rifle = new THREE.Group()
+    // origin at the hand: red grip hangs below the receiver, stock behind, barrel ahead.
+    // pushed ahead of the forearm plane so the stock rides the arm's upper side, not inside it
+    rifle.position.set(0, -0.7, 0.28)
+    // barrel continues the forearm line, muzzle a touch below the fist line
+    rifle.rotation.x = Math.PI / 2 + 0.15
+    // pistol grip hanging under the receiver (the fist wraps this)
+    add(rifle, new THREE.BoxGeometry(0.11, 0.32, 0.14), red, 0, -0.16, -0.02, 0.25)
+    // receiver
+    add(rifle, new THREE.BoxGeometry(0.15, 0.18, 0.95), blue, 0, 0.02, 0.42)
+    // buttstock: overlaps the receiver rear, rests on the forearm
+    add(rifle, new THREE.BoxGeometry(0.09, 0.16, 0.3), joint, 0, -0.02, -0.18)
+    // barrel + beam core
+    const barrelGeo = new THREE.CylinderGeometry(0.04, 0.055, 0.55, 14)
+    barrelGeo.rotateX(Math.PI / 2)
+    add(rifle, barrelGeo, joint, 0, 0.06, 1.15)
+    const beamGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.34, 10)
+    beamGeo.rotateX(Math.PI / 2)
+    add(rifle, beamGeo, beamGlow, 0, 0.06, 1.55)
+    // foregrip + accents
+    add(rifle, new THREE.BoxGeometry(0.06, 0.14, 0.06), joint, 0, -0.11, 0.72)
+    add(rifle, new THREE.BoxGeometry(0.16, 0.05, 0.6), yellow, 0, 0.1, 0.4)
+    add(rifle, new THREE.BoxGeometry(0.08, 0.07, 0.4), joint, 0, 0.04, 0.95)
+    parent.add(rifle)
+  }
+  function buildArm(sx, holdRifle) {
+    const shoulder = new THREE.Group()
+    shoulder.position.set(sx * 0.56, 1.15, 0)
+    add(shoulder, plateGeo(0.54, 0.62, 0.16, 0.36), white, sx * 0.1, 0.05, 0)
+    add(shoulder, plateGeo(0.16, 0.46, 0.05, 0.07), red, sx * 0.31, 0.05, 0.03, 0, sx * Math.PI / 2, 0)
+    add(shoulder, new THREE.BoxGeometry(0.05, 0.3, 0.05), yellow, sx * 0.1, -0.18, 0.17)
+    add(shoulder, new THREE.CylinderGeometry(0.1, 0.115, 0.5, 16), joint, 0, -0.4, 0)
+    add(shoulder, new THREE.SphereGeometry(0.12, 20, 16), joint, 0, -0.72, 0)
+    // forearm group pivoted at the elbow
+    const forearm = new THREE.Group()
+    forearm.position.set(0, -0.72, 0)
+    add(forearm, plateGeo(0.18, 0.22, 0.05, 0.12), yellow, 0, 0, sx * 0.15, 0, sx * Math.PI / 2, 0)
+    add(forearm, plateGeo(0.32, 0.6, 0.09, 0.14), white, 0, -0.33, 0.09)
+    add(forearm, plateGeo(0.24, 0.4, 0.07, 0.09), white, 0, -0.28, -0.11)
+    add(forearm, new THREE.BoxGeometry(0.05, 0.3, 0.05), red, 0, -0.3, 0.17)
+    // fist with knuckle plates + thumb
+    add(forearm, new THREE.SphereGeometry(0.15, 22, 18), white, 0, -0.7, 0.08)
+    add(forearm, new THREE.SphereGeometry(0.06, 14, 12), white, sx * -0.11, -0.66, 0.19)
+    for (let i = 0; i < 3; i++) {
+      add(forearm, new THREE.BoxGeometry(0.05, 0.05, 0.06), joint, -0.045 + (i - 1) * 0.055, -0.7, 0.23)
+    }
+    shoulder.add(forearm)
+    torso.add(shoulder)
+    if (holdRifle) {
+      shoulder.rotation.x = SHOULDER_TILT
+      shoulder.rotation.z = -sx * 0.12
+      forearm.rotation.x = FOREARM_TILT
+      buildRifle(forearm)
+    } else {
+      shoulder.rotation.x = -0.28
+      shoulder.rotation.z = sx * 0.1
+      forearm.rotation.x = -0.55
+      // beam saber on the left fist, held level and forward
+      const saber = new THREE.Group()
+      saber.position.set(0, -0.7, 0.1)
+      // mic grip: blade stays perpendicular to the arm, tilting with the ~45 deg arm angle
+      const hiltGeo = new THREE.CylinderGeometry(0.03, 0.035, 0.3, 12)
+      hiltGeo.rotateX(Math.PI / 2)
+      add(saber, hiltGeo, joint, 0, 0, 0.05)
+      const saberGeo = new THREE.CylinderGeometry(0.028, 0.028, 0.95, 10)
+      saberGeo.rotateX(Math.PI / 2)
+      add(saber, saberGeo, beamGlow, 0, 0, 0.6)
+      const saberTip = new THREE.SphereGeometry(0.03, 10, 8)
+      add(saber, saberTip, beamGlow, 0, 0, 1.08)
+      forearm.add(saber)
+    }
+    return shoulder
+  }
+  buildArm(1, false)
+  buildArm(-1, true)
+
+  // ---- head ----
+  const head = new THREE.Group()
+  head.position.set(0, 1.3, 0)
+  add(head, new THREE.CylinderGeometry(0.12, 0.15, 0.24, 16), joint, 0, 0.02, 0)
+  add(head, plateGeo(0.44, 0.5, 0.12, 0.32), white, 0, 0.38, 0)
+  add(head, plateGeo(0.3, 0.34, 0.08, 0.1), face, 0, 0.34, 0.2)
+  add(head, new THREE.SphereGeometry(0.04, 16, 12), eyeMat, -0.075, 0.4, 0.28)
+  add(head, new THREE.SphereGeometry(0.04, 16, 12), eyeMat, 0.075, 0.4, 0.28)
+  add(head, new THREE.BoxGeometry(0.26, 0.035, 0.035), yellow, 0, 0.47, 0.27)
+  add(head, plateGeo(0.22, 0.14, 0.05, 0.06), white, 0, 0.18, 0.23)
+  for (const sx of [-1, 1]) {
+    const podGeo = new THREE.CylinderGeometry(0.09, 0.11, 0.09, 14)
+    podGeo.rotateZ(Math.PI / 2)
+    add(head, podGeo, white, sx * 0.24, 0.36, 0)
+    add(head, new THREE.SphereGeometry(0.045, 12, 10), yellow, sx * 0.3, 0.36, 0)
+  }
+  // V-fin
+  const bladeGeo = new THREE.ExtrudeGeometry(finBladeShape(), {
+    depth: 0.04, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.015, bevelSegments: 2, curveSegments: 4
+  })
+  add(head, bladeGeo, red, 0, 0.6, 0.05, 0, 0, 0.42)
+  add(head, bladeGeo, red, 0, 0.6, 0.05, 0, 0, Math.PI - 0.42)
+  torso.add(head)
+
+  return { group: g, head, flameMat, flames, eyeMat, ventMat, glowCyan }
+}
+
 // ---------- teran outpost ----------
 
 function buildOutpost(track) {
@@ -1238,6 +1498,33 @@ export function useSpaceScene(containerRef) {
       }
     }
 
+    // ---- mobile suit (MS-01): slow patrol ellipse around the outpost ----
+    const ms = makeMobileSuit(texAssets)
+    scene.add(ms.group)
+    const _msPos = new THREE.Vector3()
+    const _msTan = new THREE.Vector3()
+    function updateMobileSuit(elapsed) {
+      const a = elapsed * 0.055
+      _msPos.set(
+        55 + Math.sin(elapsed * 0.017) * 4 + Math.cos(a) * 12,
+        10 + Math.sin(elapsed * 0.023) * 2 + 2.5 + Math.sin(elapsed * 0.4) * 1.2,
+        -50 + Math.cos(elapsed * 0.017) * 4 + Math.sin(a) * 12
+      )
+      _msTan.set(-Math.sin(a), 0, Math.cos(a))
+      ms.group.position.copy(_msPos)
+      ms.group.lookAt(_msPos.x + _msTan.x, _msPos.y, _msPos.z + _msTan.z)
+      ms.group.rotateZ(Math.sin(elapsed * 0.3) * 0.03)
+      ms.head.rotation.y = Math.sin(elapsed * 0.21) * 0.45
+      ms.head.rotation.x = Math.sin(elapsed * 0.13) * 0.1
+      ms.flameMat.opacity = 0.45 + 0.35 * (0.5 + 0.5 * Math.sin(elapsed * 15))
+      for (const f of ms.flames) {
+        f.scale.set(1, 1, 0.7 + 0.5 * (0.5 + 0.5 * Math.sin(elapsed * 17 + f.position.x * 3.1)))
+      }
+      ms.eyeMat.emissiveIntensity = 1.8 + 0.5 * Math.sin(elapsed * 2.4)
+      ms.ventMat.emissiveIntensity = 0.9 + 0.6 * (0.5 + 0.5 * Math.sin(elapsed * 1.7))
+      ms.glowCyan.emissiveIntensity = 1.2 + 0.6 * (0.5 + 0.5 * Math.sin(elapsed * 9))
+    }
+
     // ---- dropship squadron ----
     const shipKit = makeShipKit(texAssets)
     const ships = []
@@ -1508,6 +1795,7 @@ export function useSpaceScene(containerRef) {
       planet.rotation.y = elapsed * 0.008
       updateBelt(elapsed)
       updateOutpost(elapsed)
+      updateMobileSuit(elapsed)
       updateSquadron(elapsed, CLOCK_DELTA)
       updateRaiders(elapsed, CLOCK_DELTA)
       updateBolts(elapsed, CLOCK_DELTA)
